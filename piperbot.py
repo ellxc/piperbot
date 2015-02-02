@@ -283,11 +283,8 @@ if __name__=="__main__":
     admins2 = ["Pengwin"]
     
     bot = PiperBot()
-    #bot.connect_to(server_name, network, port, nick, channels, admins, password="wassak12!", username="ec344", ssl=True)
     bot.connect_to(server_name2, network2, port2, nick2, channels2, admins2)
     bot.load_plugin_from_module("general")
-    # bot.load_plugin_from_module("testing.testing1")
-    # bot.load_plugin_from_module("testing.testing2")
     bot.load_plugin_from_module("admintools")
     bot.load_plugin_from_module("translate")
     bot.load_plugin_from_module("markov")

@@ -88,7 +88,8 @@ userenv = {}
 
 
 def eval_(expr):
-    env = globalenv.copy()
+    env = userenv.copy()
+    env.update(globalenv)
     for stmt_or_expr in ast.parse(expr, mode='single').body:
         response = None
         if isinstance(stmt_or_expr, ast.Expr):
@@ -104,7 +105,10 @@ def eval_Assign(node, env):
     try:
         val = eval_expr(node.value, env)
         for x in node.targets:
-            env[x.id] = val
+            if x.id in globalenv:
+                env[x.id] = val
+            else:
+                userenv[x.id] = val
         return env
     except:
         raise Exception(ast.dump(node))
