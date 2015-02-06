@@ -42,15 +42,14 @@ class ServerConnection():
     def connect(self):
         self.socket.connect((self.network, self.port))
 
-
+        if self.password:
+            self.socket.send(("PASS " + self.password + "\r\n").encode())
 
         self.socket.send(('NICK '+self.nick+'\r\n').encode())
 
         self.in_thread.start()
 
         self.socket.send((" ".join(['USER ', self.user, "0", "*" ,":Piperbot" ]) + '\r\n').encode())
-        if self.password:
-            self.socket.send(("PASS " + self.password + "\r\n").encode())
 
         #for line in self.socket.recv(4096).decode().split('\r\n'):
         #    print(self.name + ": " + line)
