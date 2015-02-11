@@ -192,6 +192,7 @@ class PiperBot(threading.Thread):
                 
     def send(self, message):
         if message.server in self.servers:
+            print(">> " + str(message))
             self.servers[message.server].out_queue.put(message)
             if message.command == "PRIVMSG":
                 self.message_buffer[message.server][message.params].appendleft(message)
