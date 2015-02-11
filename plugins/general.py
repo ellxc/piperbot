@@ -1,9 +1,11 @@
 import codecs
 import re
-import multiprocessing
+import time
 
 from plugins.stuff.BasePlugin import *
 
+def lup():
+    while 1: pass
 
 @plugin(desc="general")
 class general():
@@ -20,9 +22,7 @@ class general():
     @command("r")
     @command("reverse")
     def reverse(self, message):
-        response = message.get_reply()
-        response.text = response.text[::-1]
-        yield response
+        yield message.reply(message.text[::-1])
 
     @command("echo")
     def echo(self, message):
@@ -31,38 +31,28 @@ class general():
     @command("caps")
     @command("upper")
     def uper(self, message):
-        response = message.get_reply()
-        response.text = response.text.upper()
-        yield response
+        yield message.reply(message.text.upper())
 
     @command("lower")
     def lower(self, message):
-        response = message.get_reply()
-        response.text = response.text.lower()
-        yield response
+        yield message.reply(message.text.lower())
 
     @command("rot13")
     def rot13(self, message):
-        response = message.get_reply()
-        response.text = codecs.encode(response.text, 'rot_13')
-        yield response
+        yield message.reply(codecs.encode(message.text, 'rot_13'))
 
     @command("title")
     @command("camel")
     def camel(self, message):
-        response = message.get_reply()
-        response.text = response.text.title()
-        yield response
+        yield message.reply(message.text.title())
 
     @command("b")
     @command("bin")
     @command("binary")
     def binary(self, message):
-        response = message.get_reply()
         try:
             number = int(message.text)
-            response.text = "{0:b}".format(number)
-            yield response
+            yield message.reply("{0:b}".format(number))
         except Exception as e:
             raise Exception("failed to parse: " + str(e))
 
@@ -70,11 +60,9 @@ class general():
     @command("-bin")
     @command("-binary")
     def reversebinary(self, message):
-        response = message.get_reply()
         try:
             number = int(message.text, 2)
-            response.text = str(number)
-            yield response
+            yield message.reply(str(number))
         except Exception as e:
             raise Exception("failed to parse: " + str(e))
 
@@ -84,8 +72,7 @@ class general():
         response = message.get_reply()
         try:
             number = int(message.text)
-            response.text = "{0:x}".format(number)
-            yield response
+            yield message.reply("{0:x}".format(number))
         except Exception as e:
             raise Exception("failed to parse: " + str(e))
 
@@ -107,10 +94,16 @@ class general():
     def tr(self, message):
         yield message.reply()
 
-    @regex(r"^s/((?:[^\\/]|\\.)*)/((?:[^\\/]|\\.)*)(?:/([gi]*))?")
+    @command("sleep")
+    def slp(self, message):
+        timed(lup)
+        yield message.reply("this message shouldn't get through")
+
+
+
+    @regex(r"^s/((?:[^\\/]|\\.)*)/((?:[^\\/]|\\.)*)/([gi]*)")
     @command("sed")
     def sed(self, message):
-        response = message.get_reply()
         text = None
         if message.groups:
             print(message.groups)
@@ -120,8 +113,7 @@ class general():
             match = self.sedcommand.search(message.text)
             if match:
                 find, sub, flags, text = match.groups()
-                if not flags: flags = ""
-        
+
         if message.groups or match:
             sub = re.sub(r"\\/", "/", sub, count=0)
             action = False
@@ -135,9 +127,9 @@ class general():
             if not text:
                 for msg in list(self.bot.message_buffer[message.server][message.params])[1:]:
                     if "i" in flags:
-                        matchobj = re.search(find, msg.text, flags=re.IGNORECASE)
+                        matchobj = timed(hacky, args=(find, msg.text), kwargs={"flags": re.IGNORECASE})
                     else:
-                        matchobj = re.search(find, msg.text)
+                        matchobj = timed(hacky, args=(find, msg.text))
                     if matchobj:
                         text = msg.text
                         if msg.action:
@@ -147,21 +139,13 @@ class general():
                     raise Exception("No text and no matching message found")
             if not sub:
                 sub = ""
-            temp1, temp2 = multiprocessing.Pipe()
-            proc = multiprocessing.Process(target=self.dosed, args=(temp2, find, sub, text), kwargs=kwargs)
-            proc.start()
-            if temp1.poll(2):
-                response.text = temp1.recv()
-                response.text = response.text.replace("\n", "\\n").replace("\r", "\\r")
-                response.action = action
+            result = message.reply(timed(re.sub, args=(find, sub, text), kwargs=kwargs))
+            if action:
+                result.action = True
+            yield result
 
-                yield response
-            else:
-                proc.terminate()
-                raise Exception("took too long")
-                        
         else:
             raise Exception("invalid pattern")
 
-    def dosed(self, pipe, find, sub, text, **kwargs):
-        pipe.send(re.sub(find, sub, text, **kwargs))
+def hacky(*x,**y):
+    return bool(re.search(*x,**y))

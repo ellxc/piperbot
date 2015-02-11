@@ -1,18 +1,13 @@
 import re
-import copy
 from collections import defaultdict, deque
 import threading
-from concurrent import futures
-from multiprocessing import Manager
+from multiprocessing.pool import ThreadPool
 from queue import PriorityQueue, Empty
 import inspect
 from serverconnection import ServerConnection
-from Message import RawLine
 import importlib
 import imp
 import os
-import sys
-import traceback
 
 
 class PiperBot(threading.Thread):
@@ -24,19 +19,14 @@ class PiperBot(threading.Thread):
         self.admins = defaultdict(list)
         
         self.command_char = "#"
-        
         self.in_queue = PriorityQueue()
 
         self.commands = {}
         self.plugins = {}
-        
-        self.dispatcher_pool = futures.ThreadPoolExecutor(4)
-        self.worker_pool = futures.ThreadPoolExecutor(4)
-        
-        self.manager = Manager() 
+
+        self.worker_pool = ThreadPool(processes=4)
 
         self.message_buffer = defaultdict(lambda: defaultdict(lambda:deque(maxlen=20)))
-        
         self.buffer_pattern = re.compile(r"(?:(\w+)|\s)(?:\^(\d+)|(\^+))")
         self.escaped_buffer_pattern = re.compile(r"\\\^")
         
@@ -67,8 +57,8 @@ class PiperBot(threading.Thread):
         while self.running:
             try:
                 message = self.in_queue.get(timeout=10)
-                print(message)
-                self.dispatcher_pool.submit(self.handle_message, message)
+                print("<< " + str(message))
+                self.handle_message(message)
             except Empty:
                 pass
                 
@@ -137,103 +127,73 @@ class PiperBot(threading.Thread):
         if message.command == "PING":
             response = message.copy()
             response.command = "PONG"
-            self.servers[response.server].out_queue.put(response)
+            self.send(response)
+        elif message.command == "PRIVMSG":
+            if message.text.startswith(self.command_char):
+                temp = message.reply()
+                try:
+                    temp.text = self.buffer_pattern.sub(lambda x: self.buffer_replace(self.message_buffer[message.server][message.params], x), message.text[len(self.command_char):])
+                    temp.text = self.escaped_buffer_pattern.sub("^", temp.text)
+                except Exception as e:
+                        self.send(message.reply("error: " + str(e)))
 
-        responses = self.manager.Queue()
-        trigger_count = 0
-        
-        if message.command == "PRIVMSG" and message.text.startswith(self.command_char):
-            temp = message.copy()
-            try:
-                temp.text = self.buffer_pattern.sub(lambda x: self.buffer_replace(self.message_buffer[message.server][message.params], x), message.text[len(self.command_char):])
-                temp.text = self.escaped_buffer_pattern.sub("^", temp.text)
-            except Exception as e:
-                    print(traceback.print_exc(file=sys.stdout))
-                    trigger_count += 1
-                    responses.put("error: " + str(e))
-                    responses.put("END")
-                
-            splits = list(map(lambda x: x.strip(),temp.text.split(" | ")))
-            funcs = []
-            args = []
-            valid = False
-            if splits and splits[0].split()[0].strip() and splits[0].split()[0].strip() in self.commands:
-                command = splits[0].split()[0].strip() 
-                if self.commands[command][1].get("adminonly", False) and message.nick not in self.admins[message.server]:
-                    valid = False
-                    temp.text = "admin only command"
-                    trigger_count += 1
-                    responses.put(temp)
-                    responses.put("END")
-                else:
-                    valid = True
-                    funcs.append(self.commands[splits[0].split()[0]][0])
-                    initial = " ".join(splits[0].split()[1:]) 
-                    temp.text = initial
-            for segment in splits[1:]:
-                command = segment.split()[0]
-                if command not in self.commands:
-                    valid = False
-                    temp.text = "unrecognised command: " + command
-                    trigger_count += 1
-                    responses.put(temp)
-                    responses.put("END")
-                    break
-                elif not self.commands[command][1].get("pipeable", True) and segment != splits[-1]:
-                    valid = False
-                    temp.text = "unpipeable command: " + command
-                    trigger_count += 1
-                    responses.put(temp)
-                    responses.put("END")
-                    break
-                elif self.commands[command][1].get("adminonly", False) and message.nick not in self.admins[message.server]:
-                    valid = False
-                    temp.text = "admin only command: " + command
-                    trigger_count += 1
-                    responses.put(temp)
-                    responses.put("END")
-                    break
-                else:
-                    funcs.append(self.commands[command][0])
-                if len(segment.split()) > 1:
-                    args.append(" ".join(segment.split()[1:])+" ")
-                else:
-                    args.append("")
-            args.append("")
-            if valid:
-                trigger_count += 1
-                self.worker_pool.submit(handle_responses, self.pipe, responses, temp, funcs, args)
-        
-        if message.command == "PRIVMSG":
+                splits = list(map(lambda x: x.strip(),temp.text.split(" || ")))
+                funcs = []
+                args = []
+                valid = False
+                if splits and splits[0].split()[0].strip() and splits[0].split()[0].strip() in self.commands:
+                    command = splits[0].split()[0].strip()
+                    if self.commands[command][1].get("adminonly", False) and message.nick not in self.admins[message.server]:
+                        valid = False
+                        self.send(message.reply("admin only command: " +command))
+                    else:
+                        valid = True
+                        funcs.append(self.commands[splits[0].split()[0]][0])
+                        initial = " ".join(splits[0].split()[1:])
+                for segment in splits[1:]:
+                    command = segment.split()[0]
+                    if command not in self.commands:
+                        valid = False
+                        self.send(message.reply("unrecognised command: " + command))
+                        break
+                    elif not self.commands[command][1].get("pipeable", True) and segment != splits[-1]:
+                        valid = False
+                        self.send(message.reply("unpipeable command: " + command))
+                        break
+                    elif self.commands[command][1].get("adminonly", False) and message.nick not in self.admins[message.server]:
+                        valid = False
+                        self.send(message.reply("admin only command: " +command))
+                        break
+                    else:
+                        funcs.append(self.commands[command][0])
+                    if len(segment.split()) > 1:
+                        args.append(" ".join(segment.split()[1:])+" ")
+                    else:
+                        args.append("")
+                args.append("")
+                if valid:
+                    self.worker_pool.apply_async(lambda msg,funcs_,args_: self.handle_responses(self.pipe(msg,funcs_,args_),initial=message), args=(temp.reply(initial), funcs, args),error_callback=lambda e: self.send(message.reply("error: " + str(e))))
+
             self.message_buffer[message.server][message.params].appendleft(message)
-        
+
+        triggered = []
         for plugin in self.plugins.values():
             if message.command == "PRIVMSG":
                 for regex, func in plugin._regexes:
                     match = regex.match(message.text)
                     if match:
-                        trigger_count += 1
-                        message.groups = match.groups()
-                        self.worker_pool.submit(handle_responses,func,responses,message)
+                        triggered.append(func)
             for trigger, func in plugin._triggers:
                 if trigger(message,bot):
-                    trigger_count += 1
-                    self.worker_pool.submit(handle_responses, func, responses, message)
-        end_count = 0
-        while end_count != trigger_count:
-            response = responses.get()
-            if response == "END":
-                end_count += 1
-            else:
-                if response.command == "PRIVMSG":
-                    tempmessage = response.copy()
-                    tempmessage.nick = self.servers[tempmessage.server].nick
-                    self.message_buffer[tempmessage.server][tempmessage.params].appendleft(tempmessage)
-                self.send(response)
-                
+                    triggered.append(func)
+
+        self.worker_pool.map_async(lambda x: self.handle_responses(x(message)), triggered, error_callback=lambda e: print("error: " + str(e)))
+
     def send(self, message):
         if message.server in self.servers:
             self.servers[message.server].out_queue.put(message)
+            if message.command == "PRIVMSG":
+                self.message_buffer[message.server][message.params].appendleft(message)
         else:
             raise Exception("no such server")
                 
@@ -250,36 +210,33 @@ class PiperBot(threading.Thread):
                     temp.text = args[-1] + temp.text
                     yield temp
 
-
-def handle_responses(callable_, queue, *args):
-    try:
-        x = callable_(*args)
-        if inspect.isgenerator(x):
-            for i in x:
-                queue.put(i)
-        elif x:
-            queue.put(x)
-    except Exception as e:
-        error_response = args[0].get_reply()
-        error_response.text = "error: " + str(e)
-        queue.put(error_response)
-    finally:
-        queue.put("END")
+    def handle_responses(self,response,initial=None):
+        if response:
+            try:
+                if inspect.isgenerator(response):
+                    for i in response:
+                        self.send(i)
+                else:
+                    self.send(response)
+            except Exception as e:
+                if initial is not None:
+                    self.send(initial.reply("error: " + str(e)))
+                print(e)
 
 if __name__=="__main__":
     #server 1
     server_name = "UKC"
     network = 'irc.compsoc.kent.ac.uk'
     port = 6697
-    nick = 'PiperBot2'
+    nick = 'Marvin64'
     channels = ['#bottesting']
     admins = ["Penguin"]
     #server 2
     server_name2 = "freenode"
     network2 = "holmes.freenode.net"
     port2 = 6667
-    nick2 = "PiperBot"
-    channels2 = ["#KentCS","#piperbot"]
+    nick2 = "Marvin64"
+    channels2 = ["#piperbot"]
     admins2 = ["Pengwin"]
     
     bot = PiperBot()

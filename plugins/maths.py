@@ -48,6 +48,8 @@ class countdown:
     @command("countdown")
     def cd_solve(self, message):
         target, *numbers = [int(x) for x in message.text.split()]
+        if len(numbers) > 6:
+            raise Exception("too many numbers")
         expr, value = solve(target, numbers)
         if value == target:
             yield message.reply("Solution: " + expr + " = " + str(target))

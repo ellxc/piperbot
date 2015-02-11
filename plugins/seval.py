@@ -1,6 +1,19 @@
 import ast
 import math
-from collections import OrderedDict, ChainMap
+import random
+from collections import OrderedDict, defaultdict, ChainMap
+from plugins.stuff.BasePlugin import *
+
+
+class AttrDict(dict):
+    def __init__(self):
+        super(AttrDict, self).__init__()
+        self.__dict__ = self
+
+    def __getattr__(self, name):
+        if name not in self:
+            self[name] = AttrDict()
+        return self[name]
 
 
 boolops = {
@@ -45,7 +58,7 @@ compares = {
 
 slices = {
     ast.Slice: lambda env, expr, lower, upper, step: expr[eval_expr(lower, env):eval_expr(upper, env):eval_expr(step, env)],
-    ast.Index: lambda env, expr, value: expr[eval_expr(value, env)],
+    ast.Index: lambda env, value, expr = None, value_ = None: expr[eval_expr(value, env)] if expr is not None else eval_expr(value_,env)[eval_expr(value, env)],
 }
 
 exprs = {
@@ -64,11 +77,12 @@ exprs = {
     ast.Call: lambda env, func, args, starargs, keywords, kwargs: call_(func, args, starargs, keywords, kwargs, env),
     ast.Num: lambda env, n: n,
     ast.Str: lambda env, s: s,
-    ast.Subscript: lambda env, ctx, value, slice: slices[type(slice)](env=env, **dict(slice.iter_fields())),
-    ast.Name: lambda env, ctx, id: env[id] if id in env else raise_("name '%s' is not defined" % id),
+    ast.Subscript: lambda env, ctx, value, slice: slices[type(slice)](env=env,value_ = value, **dict(ast.iter_fields(slice))),
+    ast.Name: lambda env, ctx, id: env[id],# if id in env else raise_("name '%s' is not defined" % id),
     ast.List: lambda env, ctx, elts: list(eval_expr(elt, env) for elt in elts),
     ast.Tuple: lambda env, ctx, elts: tuple(eval_expr(elt, env) for elt in elts),
     ast.NameConstant: lambda env, value: value,
+    ast.Attribute: lambda env, value, attr, ctx: (getattr(eval_expr(value,env),attr) if isinstance(value,ast.Attribute) else getattr(eval_expr(value,env),attr)) if not attr.startswith("__") else raise_("access to private fields is restricted"),
 }
 
 
@@ -81,42 +95,68 @@ globalenv = {
     'list': list,
     'bool': bool,
     "sin": math.sin,
-    "pi": math.pi
+    "pi": math.pi,
+    "ord": ord,
+    "chr": chr,
 }
 
-userenv = {}
+localenv = {}
+
+userenv = defaultdict(AttrDict)
 
 
-def eval_(expr):
-    env = userenv.copy()
+def attrpath (node):
+    if isinstance(node, ast.Attribute):
+        first, rest = attrpath(node.value)
+        return first, (node.attr + (("." + rest) if rest else ""))
+    else:
+        return node.id, ""
+
+def eval_(expr, msg):
+    env = localenv.copy()
     env.update(globalenv)
+    env.update(userenv)
     for stmt_or_expr in ast.parse(expr, mode='single').body:
         response = None
         if isinstance(stmt_or_expr, ast.Expr):
             response = eval_expr(stmt_or_expr.value, env)
         elif isinstance(stmt_or_expr, ast.Assign):
-            env = eval_Assign(stmt_or_expr, env)
+            env = eval_Assign(stmt_or_expr, env, msg)
+        else:
+            raise Exception(ast.dump(stmt_or_expr))
 
         if response is not None:
             yield response
 
 
-def eval_Assign(node, env):
-    try:
-        val = eval_expr(node.value, env)
-        for x in node.targets:
+def eval_Assign(node, env, msg):
+    val = eval_expr(node.value, env)
+    for x in node.targets:
+        if isinstance(x,ast.Attribute):
+            first, rest = attrpath(x)
+            if first == msg.nick:
+                attr = eval_expr(x.value, userenv)
+                setattr(userenv[first] ,x.attr,val)
+            elif first in userenv:
+                raise Exception("I'm afraid I can't let you do that.")
+            else:
+                setattr(eval_expr(x.value, localenv),x.attr,val)
+        elif isinstance(x,ast.Name):
             if x.id in globalenv:
                 env[x.id] = val
             else:
-                userenv[x.id] = val
-        return env
-    except:
-        raise Exception(ast.dump(node))
+                localenv[x.id] = val
+                env[x.id] = val
+        elif isinstance(x, ast.Subscript):
+            pass
+        else:
+            raise Exception(ast.dump(x))
+    return env
 
 
 def eval_expr(node, env):
     if type(node) in exprs:
-        return exprs[type(node)](env=env, **dict(ast.iter_fields(node)))
+        return timed(exprs[type(node)], kwargs=ChainMap({"env":env},dict(ast.iter_fields(node))),proc=False)
     else:
         try:
             raise Exception(ast.dump(node))
@@ -260,14 +300,13 @@ def getenv(funcname, args, vararg, kwarg, defaults, call_args, call_kwargs, env,
             newenv[key] = value
     return newenv
 
-from plugins.stuff.BasePlugin import *
 
 @plugin
 class eval:
     @command("calc")
     @command(">")
     def calc(self, message):
-        for response in eval_(message.text.strip()):
+        for response in eval_(message.text.strip(), message):
             yield message.reply(repr(response))
 
     @command("liteval")

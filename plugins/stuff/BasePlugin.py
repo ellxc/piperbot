@@ -1,5 +1,10 @@
 import inspect
 import re
+from multiprocessing import Pool
+from multiprocessing.pool import ThreadPool
+from multiprocessing import TimeoutError as TE
+import os
+
 
 def plugin(desc=None):
     def wrapper(clas):
@@ -17,11 +22,13 @@ def onLoad(func):
         func._onLoad = True
     return func
 
+
 def onUnload(func):
     if not hasattr(func, '_onUnload'):
         func._onUnload = True
     return func
-    
+
+
 def trigger(trigger=None):
     def wrapper(func):
         if not hasattr(func, '_triggers'):
@@ -33,7 +40,8 @@ def trigger(trigger=None):
         raise Exception("no trigger specified")
     else:
         return wrapper
-    
+
+
 def command(command=None,**kwargs):
     def wrapper(func):
         if not hasattr(func, '_commands'):
@@ -45,7 +53,8 @@ def command(command=None,**kwargs):
         return wrapper(command)
     else:
         return wrapper
-    
+
+
 def regex(regex=None):
     def wrapper(func):
         if not hasattr(func, '_regexes'):
@@ -56,6 +65,16 @@ def regex(regex=None):
         raise Exception("no regex specified")
     else:
         return wrapper
+
+
+def timed(func, args=(), kwargs={}, timeout=2,proc=True):
+    with (Pool if proc else ThreadPool)(processes=1) as pool:
+        result = pool.apply_async(func,args=args,kwds=kwargs)
+        try:
+            return result.get(timeout)
+        except TE as e:
+            pool.terminate()
+            raise Exception("Took more than %s seconds" % timeout)
 
 
 def _plugin__init__(self,bot):

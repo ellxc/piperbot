@@ -5,82 +5,71 @@ import re
 from Message import Message
 import time
 from ssl import wrap_socket
+import events
 
-SPLIT_REGEX = r"^(?::(?:(?:(\S+)!)?(?:(\S+)@)?(\S+) ))?(\S+)(?: (?!:)(.+?))?(?: :(\x01ACTION )?(.+))?$"
+SPLIT_REGEX = r"^(?::(?:(?:(?P<nick>\S+)!)?(?:(?P<user>\S+)@)?(?P<domain>\S+) +))?" \
+              r"(?P<command>\S+)(?: +(?!:)(?P<params>.+?))?(?: *:(?P<action>\x01ACTION )?(?P<text>.+?))?\x01?$"
 
 
 class ServerConnection():
-    def __init__(self, queue, name, network, port, nick, password=None, username=None, ircname = None, channels=None,ssl=False):
-
-
-
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM )
-
-        if ssl:
-            self.socket = wrap_socket(self.socket)
-
-        self.socket.bind(('', 0))
-
-
+    def __init__(self, queue, name, network, port, nick, password=None, username=None, ircname = None, auto_join_channels=None,ssl=False):
         self.in_queue = queue
         self.out_queue = PriorityQueue()
         self.connected = False
-
-        
-        self.in_thread = self.InThread(self.socket, self.in_queue, name, self.reconnect)
-        self.out_thread = self.OutThread(self.socket, self.out_queue, self.reconnect)
-        
         self.name = name
         self.network = network
         self.port = port
+        self.ssl = ssl
         self.nick = nick
         self.user = username or nick
         self.ircname = ircname or nick
         self.password = password
-        self.channels = channels if channels else []
+        self.auto_join_channels = auto_join_channels if auto_join_channels else []
+
+        self.handlers = dict()
+        self.setup_handlers()
+
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if self.ssl:
+            self.socket = wrap_socket(self.socket)
+        self.socket.bind(('', 0))
+        self.in_thread = self.InThread(self.socket, self.in_queue, self.name, self.handlers, self.reconnect)
+        self.out_thread = self.OutThread(self.socket, self.out_queue, self.reconnect)
+
+    def setup_handlers(self):
+        @handler(self,"001")
+        def on_connect():
+            print("JOINED")
+            for channel in self.auto_join_channels:
+                self.socket.send(('JOIN '+channel+'\r\n').encode())
+
 
     def connect(self):
         self.socket.connect((self.network, self.port))
-
         if self.password:
             self.socket.send(("PASS " + self.password + "\r\n").encode())
-
         self.socket.send(('NICK '+self.nick+'\r\n').encode())
-
         self.in_thread.start()
-
         self.socket.send((" ".join(['USER ', self.user, "0", "*" ,":Piperbot" ]) + '\r\n').encode())
-
-        #for line in self.socket.recv(4096).decode().split('\r\n'):
-        #    print(self.name + ": " + line)
-
-        for channel in self.channels:
-            self.socket.send(('JOIN '+channel+'\r\n').encode())
-
         self.out_thread.start()
         
     def reconnect(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect((self.network, self.port))
-        for line in self.socket.recv(4096).decode().split('\r\n'):
-            print(self.name + ": " + line)
-        self.socket.send(('NICK '+self.nick+'\r\n').encode())
-        self.socket.send(('USER '+(self.nick+' ')*3+'Python IRC\r\n').encode())
-        for channel in self.channels:
-            self.socket.send(('JOIN '+channel+'\r\n').encode())
-
-        self.in_thread = self.InThread(self.socket, self.in_queue, self.name, self.reconnect)
+        if self.ssl:
+            self.socket = wrap_socket(self.socket)
+        self.socket.bind(('', 0))
+        self.in_thread = self.InThread(self.socket, self.in_queue, self.name, self.handlers, self.reconnect)
         self.out_thread = self.OutThread(self.socket, self.out_queue, self.reconnect)
-        self.in_thread.start()
-        self.out_thread.start()
+        self.connect()
 
     class InThread(threading.Thread):
-        def __init__(self, in_socket, in_queue, server_name, on_error):
+        def __init__(self, in_socket, in_queue, server_name, handlers, on_error):
             super(ServerConnection.InThread, self).__init__(daemon=True)
             self.socket = in_socket
             self.in_queue = in_queue
             self.server_name = server_name
             self.message_splitter = re.compile(SPLIT_REGEX)
+            self.handlers = handlers
             self.onError = on_error
 
         def run(self):
@@ -90,7 +79,10 @@ class ServerConnection():
                     lines = data.decode().strip().split("\r\n")
                     for line in lines:
                         if line:
-                            self.in_queue.put(Message(self.server_name, *self.message_splitter.match(line).groups("")))
+                            msg = Message(self.server_name, *self.message_splitter.match(line).groups(""))
+                            if msg.command in self.handlers:
+                                self.handlers[msg.command]()
+                            self.in_queue.put(msg)
                 except Exception as e:
                     print("ERROR IN " + self.name+" IN THREAD, " + str(e))
                     self.onError()
@@ -120,3 +112,13 @@ class ServerConnection():
         self.socket.send(('QUIT '+message+'\r\n').encode())
         self.socket.close()
         self.connected = False
+
+
+def handler(server, event=None):
+    def wrapper(func):
+        server.handlers[event] = func
+        return func
+    if not event:
+        raise Exception("no event specified")
+    else:
+        return wrapper

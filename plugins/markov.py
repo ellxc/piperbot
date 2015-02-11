@@ -91,7 +91,7 @@ class markov:
         self.chain.links.remove({})
         return []
         
-    @trigger(lambda message,bot: bot.servers[message.server].nick in message.text and message.nick not in ["CirnoX","Marvin32"] and message.text[0] not in "!#%$.")
+    @trigger(lambda message,bot: Message.is_message(message,bot) and bot.servers[message.server].nick in message.text and message.nick not in ["CirnoX"] and message.text[0] not in "!#%$.")
     def mention(self,message):
         if message.text.startswith(self.bot.servers[message.server].nick+":"):
             try:
@@ -102,7 +102,7 @@ class markov:
             yield message.reply(self.chain.make_line())
         
         
-    @trigger(Message.isMessage)
+    @trigger(Message.is_message)
     def add(self,message):
         if message.text and message.text[0] not in "!#%$.":
             self.chain.putline(message.text)

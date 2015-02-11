@@ -1,9 +1,6 @@
-from collections import deque, defaultdict
 import urllib.request, urllib.error, urllib.parse
 import json
-import re
 from plugins.stuff.BasePlugin import *
-from Message import Message, RawLine
 
 @plugin(desc="google translator")
 class google():
