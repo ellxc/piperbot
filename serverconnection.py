@@ -113,6 +113,7 @@ class ServerConnection():
         self.socket.close()
         self.connected = False
 
+
 def handler(server, event=None):
     def wrapper(func):
         server.handlers[event] = func

@@ -72,8 +72,6 @@ class Message():
         else:
             return Message("",*re.match(SPLIT_REGEX,line).groups(""))
 
-
-
     @staticmethod
     def is_ping(msg,bot):
         return msg.command == "PING"

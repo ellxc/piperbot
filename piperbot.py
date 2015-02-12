@@ -19,7 +19,6 @@ class PiperBot(threading.Thread):
         self.admins = defaultdict(list)
         
         self.command_char = "#"
-
         self.in_queue = PriorityQueue()
 
         self.commands = {}
@@ -189,7 +188,7 @@ class PiperBot(threading.Thread):
                     triggered.append(func)
 
         self.worker_pool.map_async(lambda x: self.handle_responses(x(message)), triggered, error_callback=lambda e: print("error: " + str(e)))
-                
+
     def send(self, message):
         if message.server in self.servers:
             print(">> " + str(message))
