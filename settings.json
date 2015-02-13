@@ -1,0 +1,17 @@
+﻿[
+	{	
+		"IRCNet"  : "KentIRC",
+		"IRCUser" : "abc123",
+		"IRCName" : "abc123",
+		"IRCHost" : "irc.cs.kent.ac.uk",
+		"IRCNick" : "PiperBot",
+		"IRCPass" : "secret",
+		"IRCPort" : 6697,
+		"UseSSL"  : true,
+
+		"Plugins" : ["general", "admintools"],
+
+		"AutoJoin" : ["#KentCS"],
+		"Admins" : ["Pengwin"]
+	}
+]

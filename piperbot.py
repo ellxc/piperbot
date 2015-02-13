@@ -8,7 +8,9 @@ from serverconnection import ServerConnection
 import importlib
 import imp
 import os
-
+import json
+import codecs
+from sys import argv
 
 class PiperBot(threading.Thread):
     def __init__(self):
@@ -225,25 +227,25 @@ class PiperBot(threading.Thread):
                 print(e)
 
 if __name__=="__main__":
-    #server 1
-    server_name = "UKC"
-    network = 'irc.compsoc.kent.ac.uk'
-    port = 6697
-    nick = 'Marvin64'
-    channels = ['#bottesting']
-    admins = ["Penguin"]
-    #server 2
-    server_name2 = "freenode"
-    network2 = "holmes.freenode.net"
-    port2 = 6667
-    nick2 = "Marvin64"
-    channels2 = ["#piperbot"]
-    admins2 = ["Pengwin"]
+    json_config = codecs.open(argv[1], 'r', 'utf-8-sig')
+    #print(json_config)
     
-    bot = PiperBot()
-    bot.connect_to(server_name2, network2, port2, nick2, channels2, admins2)
-    bot.load_plugin_from_module("general")
-    bot.load_plugin_from_module("admintools")
-    bot.load_plugin_from_module("translate")
-    bot.load_plugin_from_module("markov")
-    bot.run()
+    config = json.load(json_config)
+    
+    for server in config:
+        server_name = server["IRCNet"]
+        network = server["IRCHost"]
+        name = server["IRCName"]
+        user = server["IRCUser"]
+        port = server["IRCPort"]
+        nick = server["IRCNick"]
+        password = server["IRCPass"] if "IRCPass" in server else None
+        autojoin = server["AutoJoin"]
+        admins = server["Admins"]
+        usessl = server["UseSSL"]
+        plugins = server["Plugins"]
+        bot = PiperBot()
+        bot.connect_to(server_name, network, port, nick, autojoin, admins, password, user, name, usessl)
+        for plugin in plugins:
+            bot.load_plugin_from_module(plugin)
+        bot.run()
