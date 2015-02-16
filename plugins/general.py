@@ -14,7 +14,7 @@ class general():
     itersplit = re.compile(r'(?:"[^"]*"|[^ ]+)')
 
 
-    #@command("iterate")
+    @command("iterate", adminonly=True)
     def iter(self, message):
         for x in self.itersplit.finditer(message.text):
             yield message.reply(x.group(0))
