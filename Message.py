@@ -23,13 +23,20 @@ class Message():
 
     @property
     def text(self):
-        if self.action and self.command == "PRIVMSG" or self.command == "ACTION":
-            return "\001ACTION " +self._text +"\001"
-        else:
-            return self._text
+        #if self.action and self.command == "PRIVMSG" or self.command == "ACTION":
+        #    return "\001ACTION " +self._text +"\001"
+        #else:
+        return self._text
 
     @text.setter
     def text(self,val):
+        if val.startswith("\001ACTION"):
+            val = val[6:]
+            self.action = True
+            
+            if val.endswith("\001"):
+                val = val[:-1]
+    
         self._text = val
 
     @property
@@ -44,12 +51,12 @@ class Message():
         self._command = val
 
     def to_line(self):
-        return self.command + " " + self.params + ((" :" + self.text) if self._text else "")
-
-
+        return "%s %s :%s%s%s" % (self.command,self.params,("\001ACTION " if self.action else ""),self.text,("\001" if self.action else ""))
 
     def reply(self, text=None):
-        return Message(server=self.server, command=self.command, params=self.params, text=text if text is not None else self.text)
+        return Message(server=self.server, nick=self.nick, command=self.command, 
+        domain=self.domain, action=self.action, groups=self.groups, 
+        params=self.params, text=text if text is not None else self.text)
 
     def copy(self):
         return copy.copy(self)

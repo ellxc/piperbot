@@ -1,5 +1,5 @@
 from plugins.stuff.BasePlugin import *
-from Message import Message, RawLine
+from Message import Message
 import time
 
 @plugin(desc="testing module 1234")
@@ -45,9 +45,7 @@ class testing2:
 
     @command("test")
     def test(self,message):
-        yield message.reply("1")
-        time.sleep(5)
-        yield message.reply("2")
+        yield message.reply("your message: " + str(message))
 
     @regex("^<(.*?)>$")
     def regextest(self,message):

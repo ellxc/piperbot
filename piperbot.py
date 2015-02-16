@@ -8,6 +8,7 @@ from serverconnection import ServerConnection
 import importlib
 import imp
 import os
+import string
 
 
 class PiperBot(threading.Thread):
@@ -30,6 +31,8 @@ class PiperBot(threading.Thread):
         self.message_buffer = defaultdict(lambda: defaultdict(lambda:deque(maxlen=20)))
         self.buffer_pattern = re.compile(r"(?:(\w+)|\s)(?:\^(\d+)|(\^+))")
         self.escaped_buffer_pattern = re.compile(r"\\\^")
+        
+        self.stringformatter = string.Formatter()
         
         self.running = False
         
@@ -131,7 +134,7 @@ class PiperBot(threading.Thread):
             self.send(response)
         elif message.command == "PRIVMSG":
             if message.text.startswith(self.command_char):
-                temp = message.reply()
+                temp = message.copy()
                 try:
                     temp.text = self.buffer_pattern.sub(lambda x: self.buffer_replace(self.message_buffer[message.server][message.params], x), message.text[len(self.command_char):])
                     temp.text = self.escaped_buffer_pattern.sub("^", temp.text)
@@ -203,13 +206,26 @@ class PiperBot(threading.Thread):
         if len(funcs) == 1:
             for x in funcs[0](initial):
                 temp = x.copy()
-                temp.text = args[0] + temp.text
+                
+                formats = list(self.stringformatter.parse(args[0]))
+                
+                if len(formats) > 1 or (formats and any(map(lambda x: x is not None,formats[0][1:]))):
+                    temp.text = args[0].format(*([temp.text]*len(formats)))
+                else:
+                    temp.text = args[0] + temp.text
                 yield temp
         else:
             for y in self.pipe(initial, funcs[:-1], args[:-1]):
                 for x in funcs[-1](y):
                     temp = x.copy()
-                    temp.text = args[-1] + temp.text
+                    
+                    formats = list(self.stringformatter.parse(args[-1]))
+                
+                    if len(formats) > 1 or (formats and any(map(lambda x: x is not None,formats[0][1:]))):
+                        temp.text = args[-1].format(*([temp.text]*len(formats)))
+                    else:
+                        temp.text = args[-1] + temp.text
+
                     yield temp
 
     def handle_responses(self,response,initial=None):
@@ -247,4 +263,5 @@ if __name__=="__main__":
     bot.load_plugin_from_module("admintools")
     bot.load_plugin_from_module("translate")
     bot.load_plugin_from_module("markov")
+    bot.load_plugin_from_module("maths")
     bot.run()
