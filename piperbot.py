@@ -244,12 +244,16 @@ class PiperBot(threading.Thread):
 
 if __name__=="__main__":
     json_config = codecs.open(argv[1], 'r', 'utf-8-sig')
-    #print(json_config)
+    print(json_config)
     
     config = json.load(json_config)
-
+    print(config)
     bot = PiperBot()
-    for server in config:
+
+    for plugin in config["plugins"]:
+        bot.load_plugin_from_module(plugin)
+
+    for server in config["servers"]:
         server_name = server["IRCNet"]
         network = server["IRCHost"]
         name = server["IRCName"]
@@ -260,8 +264,6 @@ if __name__=="__main__":
         autojoin = server["AutoJoin"]
         admins = server["Admins"]
         usessl = server["UseSSL"]
-        plugins = server["Plugins"]
+        print((server_name, network, port, nick, autojoin, admins, password, user, name, usessl))
         bot.connect_to(server_name, network, port, nick, autojoin, admins, password, user, name, usessl)
-        for plugin in plugins:
-            bot.load_plugin_from_module(plugin)
-        bot.run()
+    bot.run()

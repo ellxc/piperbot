@@ -1,17 +1,16 @@
-﻿[
-	{	
-		"IRCNet"  : "KentIRC",
-		"IRCUser" : "abc123",
-		"IRCName" : "abc123",
-		"IRCHost" : "irc.cs.kent.ac.uk",
-		"IRCNick" : "PiperBot",
-		"IRCPass" : "secret",
-		"IRCPort" : 6697,
-		"UseSSL"  : true,
+﻿{
+  "plugins" : ["general", "admintools", "maths", "seval", "markov", "translate"],
+    "servers" : [
+    {
+        "IRCNet"  : "Holmes",
+		"IRCUser" : "piperbot",
+		"IRCName" : "piperbot",
+		"IRCHost" : "holmes.freenode.net",
+		"IRCNick" : "piperbot",
+		"IRCPort" : 6666,
+		"UseSSL"  : false,
 
-		"Plugins" : ["general", "admintools"],
-
-		"AutoJoin" : ["#KentCS"],
+		"AutoJoin" : ["#piperbot"],
 		"Admins" : ["Pengwin"]
-	}
-]
+    }
+]}
