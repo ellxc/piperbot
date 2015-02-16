@@ -108,11 +108,12 @@ class general():
         if message.groups:
             print(message.groups)
             find, sub, flags = message.groups
+            if not flags: flags = ""
         else:
             match = self.sedcommand.search(message.text)
             if match:
                 find, sub, flags, text = match.groups()
-            
+
         if message.groups or match:
             sub = re.sub(r"\\/", "/", sub, count=0)
             action = False
@@ -142,7 +143,7 @@ class general():
             if action:
                 result.action = True
             yield result
-                        
+
         else:
             raise Exception("invalid pattern")
 

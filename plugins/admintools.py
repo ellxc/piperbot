@@ -9,6 +9,7 @@ class AdminTools:
     @command("connect", adminonly=True)
     def connect(self, message):
         match = self.connect_regex.match(message.text)
+
         if match:
             try:
                 name, network, port, channels = match.groups()
