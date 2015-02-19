@@ -10,7 +10,7 @@ def lup():
 @plugin(desc="general")
 class general():
 
-    sedcommand = re.compile(r"s/((?:[^\\/]|\\.)*)/((?:[^\\/]|\\.)*)/([gi]*)(?: (.*))?")
+    sedcommand = re.compile(r"s([:/%|\!@,])((?:(?!\1)[^\\]|\\.)*)\1((?:(?!\1)[^\\]|\\.)*)\1?([gi]*) ?(.*)")
     itersplit = re.compile(r'(?:"[^"]*"|[^ ]+)')
 
 
@@ -94,24 +94,37 @@ class general():
     def tr(self, message):
         yield message.reply()
 
-    @command("sleep")
-    def slp(self, message):
-        timed(lup)
-        yield message.reply("this message shouldn't get through")
+    @command("help")
+    def help(self, message):
+        """help <command>   -> returns the help for the specified command
+            derp derp derp
+        
+        """
+        try:
+            com = message.text.split()[0]
+            func = self.bot.commands[com][0]
+        except:
+            raise Exception("specifed command not found")
+        doc = func.__doc__
+        if not doc:
+            yield message.reply("No help found for specified command")
+        else:
+            yield message.reply(doc.split("\r\n")[0])
+        
 
 
 
-    @regex(r"^s/((?:[^\\/]|\\.)*)/((?:[^\\/]|\\.)*)/([gi]*)")
+    @regex(r"^s([:/%|\!@,])((?:(?!\1)[^\\]|\\.)*)\1((?:(?!\1)[^\\]|\\.)*)\1?([gi]*)")
     @command("sed")
     def sed(self, message):
         text = None
         if message.groups:
             print(message.groups)
-            find, sub, flags = message.groups
+            delim, find, sub, flags = message.groups
         else:
             match = self.sedcommand.search(message.text)
             if match:
-                find, sub, flags, text = match.groups()
+                 delim, find, sub, flags, text = match.groups()
             
         if message.groups or match:
             sub = re.sub(r"\\/", "/", sub, count=0)
