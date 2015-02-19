@@ -2,6 +2,8 @@ import ast
 import math
 from collections import OrderedDict, defaultdict, ChainMap
 from wrappers import *
+import pymongo
+import pickle
 
 
 class AttrDict(dict):
@@ -86,7 +88,7 @@ exprs = {
     ast.Str: lambda env, s: s,
     ast.Subscript: lambda env, ctx, value, slice_:
         slices[type(slice_)](env=env, value_=value, **dict(ast.iter_fields(slice_))),
-    ast.Name: lambda env, ctx, id_: env[id_],
+    ast.Name: lambda env, ctx, id: env[id],
     ast.List: lambda env, ctx, elts: list(eval_expr(elt, env) for elt in elts),
     ast.Tuple: lambda env, ctx, elts: tuple(eval_expr(elt, env) for elt in elts),
     ast.NameConstant: lambda env, value: value,
@@ -334,6 +336,24 @@ def getenv(funcname, args, vararg, kwarg, defaults, call_args, call_kwargs, env,
 
 @plugin
 class Eval:
+
+    @on_load
+    def init(self):
+        con = pymongo.MongoClient()
+        db = con["seval"]
+        for table in db.collection_names():
+            for record in db[table].find({ "bin": { "$exists": True } }):
+                print(record)
+                userenv[table][record["key"]] = pickle.loads(record["bin"])
+    
+    @on_unload    
+    def save(self):
+        con = pymongo.MongoClient()
+        db = con["seval"]
+        for user,space in userenv.items():
+            for key,val in space.items():
+                db[user].insert({"key":key,"bin":pickle.dumps(val)})
+                
     @command("calc")
     @command(">")
     def calc(self, message):
