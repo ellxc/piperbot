@@ -1,4 +1,4 @@
-from plugins.stuff.BasePlugin import *
+from wrappers import *
 from Message import Message
 import time
 

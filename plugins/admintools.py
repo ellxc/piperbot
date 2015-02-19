@@ -1,4 +1,4 @@
-from plugins.stuff.BasePlugin import *
+from wrappers import *
 
 
 @plugin(desc="admin commands")
@@ -9,7 +9,6 @@ class AdminTools:
     @command("connect", adminonly=True)
     def connect(self, message):
         match = self.connect_regex.match(message.text)
-
         if match:
             try:
                 name, network, port, channels = match.groups()

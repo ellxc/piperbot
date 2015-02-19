@@ -2,9 +2,7 @@ import inspect
 import re
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
-from multiprocessing import TimeoutError as TE
-import os
-
+from multiprocessing import TimeoutError
 
 def plugin(desc=None):
     def wrapper(clas):
@@ -17,24 +15,24 @@ def plugin(desc=None):
     else:
         return wrapper
 
-def onLoad(func):
+
+def on_load(func):
     if not hasattr(func, '_onLoad'):
         func._onLoad = True
     return func
 
 
-def onUnload(func):
+def on_unload(func):
     if not hasattr(func, '_onUnload'):
         func._onUnload = True
     return func
 
 
-def trigger(trigger=None):
+def trigger(trigger_=None):
     def wrapper(func):
         if not hasattr(func, '_triggers'):
             func._triggers = []
-        func._triggers.append(trigger)
-        print(func._triggers)
+        func._triggers.append(trigger_)
         return func
     if not trigger:
         raise Exception("no trigger specified")
@@ -42,15 +40,15 @@ def trigger(trigger=None):
         return wrapper
 
 
-def command(command=None,**kwargs):
+def command(name=None, **kwargs):
     def wrapper(func):
         if not hasattr(func, '_commands'):
             func._commands = []
-        func2 = dict(kwargs,command=command if not inspect.isfunction(command) else func.__name__)
+        func2 = dict(kwargs, command=name if not inspect.isfunction(name) else func.__name__)
         func._commands.append(func2)
         return func        
-    if inspect.isfunction(command):
-        return wrapper(command)
+    if inspect.isfunction(name):
+        return wrapper(name)
     else:
         return wrapper
 
@@ -67,12 +65,21 @@ def regex(regex=None):
         return wrapper
 
 
-def timed(func, args=(), kwargs={}, timeout=2,proc=True):
+def event(event_):
+    def wrapper(func):
+        if not hasattr(func, '_handlers'):
+            func._handlers = []
+        func._handlers.append(event_)
+        return func
+    return wrapper
+
+
+def timed(func, args=(), kwargs={}, timeout=2, proc=True):
     with (Pool if proc else ThreadPool)(processes=1) as pool:
-        result = pool.apply_async(func,args=args,kwds=kwargs)
+        result = pool.apply_async(func, args=args, kwds=kwargs)
         try:
             return result.get(timeout)
-        except TE as e:
+        except TimeoutError as e:
             pool.terminate()
             raise Exception("Took more than %s seconds" % timeout)
 
@@ -84,6 +91,7 @@ def _plugin__init__(self,bot):
     self._triggers = []
     self._commands = []
     self._regexes = []
+    self._handlers = []
     for name,func in inspect.getmembers(self, predicate=inspect.ismethod):
         if hasattr(func, '_onLoad'):
             self._onLoads.append(func)
@@ -98,3 +106,6 @@ def _plugin__init__(self,bot):
         if hasattr(func, '_regexes'):
             for regex in func._regexes:
                 self._regexes.append((regex,func))
+        if hasattr(func, '_handlers'):
+            for event in func._handlers:
+                self._handlers.append((event,func))

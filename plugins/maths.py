@@ -1,4 +1,4 @@
-from plugins.stuff.BasePlugin import *
+from wrappers import *
 from plugins.stuff.countdownsolver import solve, solve_best
 from Message import Message
 from collections import namedtuple, defaultdict, Counter, ChainMap

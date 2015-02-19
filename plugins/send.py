@@ -1,4 +1,4 @@
-from plugins.stuff.BasePlugin import *
+from wrappers import *
 
 @plugin(desc="sending tools")
 class sender:

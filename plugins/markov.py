@@ -1,5 +1,4 @@
-from plugins.stuff.BasePlugin import *
-from Message import Message
+from wrappers import *
 import pymongo
 from bson.code import Code
 import random
@@ -68,7 +67,7 @@ class mongomarkov():
 @plugin
 class markov:
 
-    @onLoad
+    @on_load
     def init(self):
         self.chain = mongomarkov()
     
@@ -87,12 +86,12 @@ class markov:
         
         
     @command("clear", adminonly=True)
-    def clear(self,message):
+    def clear(self, message):
         self.chain.links.remove({})
         return []
         
-    @trigger(lambda message,bot: Message.is_message(message,bot) and bot.servers[message.server].nick in message.text and message.nick not in ["CirnoX"] and message.text[0] not in "!#%$.")
-    def mention(self,message):
+    @trigger(lambda message, bot: message.command == "PRIVMSG" and bot.servers[message.server].nick in message.text and message.nick not in ["CirnoX"] and message.text[0] not in "!#%$.")
+    def mention(self, message):
         if message.text.startswith(self.bot.servers[message.server].nick+":"):
             try:
                 yield message.reply(self.chain.make_line_from(message.nick+":"))
@@ -100,10 +99,8 @@ class markov:
                 yield message.reply(self.chain.make_line())
         else:
             yield message.reply(self.chain.make_line())
-        
-        
-    @trigger(Message.is_message)
-    def add(self,message):
+
+    @event("PRIVMSG")
+    def add(self, message):
         if message.text and message.text[0] not in "!#%$.":
             self.chain.putline(message.text)
-        

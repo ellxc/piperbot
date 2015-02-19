@@ -1,19 +1,23 @@
 import ast
 import math
-import random
 from collections import OrderedDict, defaultdict, ChainMap
-from plugins.stuff.BasePlugin import *
+from wrappers import *
 
 
 class AttrDict(dict):
-    def __init__(self):
-        super(AttrDict, self).__init__()
-        self.__dict__ = self
+    def __init__(self, *args, **kwargs):
+        super(AttrDict, self).__init__(*args, **kwargs)
 
     def __getattr__(self, name):
         if name not in self:
-            self[name] = AttrDict()
+            if name.startswith("__"):
+                return dict.__getattribute__(self, name)
+            else:
+                self[name] = AttrDict()
         return self[name]
+
+    def __setattr__(self, key, value):
+        self[key] = value
 
 
 boolops = {
@@ -57,8 +61,10 @@ compares = {
 }
 
 slices = {
-    ast.Slice: lambda env, expr, lower, upper, step: expr[eval_expr(lower, env):eval_expr(upper, env):eval_expr(step, env)],
-    ast.Index: lambda env, value, expr = None, value_ = None: expr[eval_expr(value, env)] if expr is not None else eval_expr(value_,env)[eval_expr(value, env)],
+    ast.Slice: lambda env, expr, lower, upper, step:
+        expr[eval_expr(lower, env):eval_expr(upper, env):eval_expr(step, env)],
+    ast.Index: lambda env, value, expr = None, value_ = None:
+        expr[eval_expr(value, env)] if expr is not None else eval_expr(value_, env)[eval_expr(value, env)],
 }
 
 exprs = {
@@ -67,7 +73,8 @@ exprs = {
     ast.UnaryOp: lambda env, op, operand: unaryops[type(op)](eval_expr(operand, env)),
     ast.Lambda: lambda env, args, body: lambda_(args, body, env),
     ast.IfExp: lambda env, test, body, orelse: eval_expr(body, env) if eval_expr(test, env) else eval_expr(orelse, env),
-    ast.Dict: lambda env, keys, values: {eval_expr(key, env): eval_expr(value, env) for key, value in zip(keys, values)},
+    ast.Dict: lambda env, keys, values: {eval_expr(key, env):
+                                         eval_expr(value, env) for key, value in zip(keys, values)},
     ast.Set: lambda env, elts: {eval_expr(elt, env) for elt in elts},
     ast.ListComp: lambda env, elt, generators: [eval_expr(elt, genenv) for genenv in generate(generators, env)],
     ast.SetComp: lambda env, elt, generators: {eval_expr(elt, genenv) for genenv in generate(generators, env)},
@@ -77,12 +84,15 @@ exprs = {
     ast.Call: lambda env, func, args, starargs, keywords, kwargs: call_(func, args, starargs, keywords, kwargs, env),
     ast.Num: lambda env, n: n,
     ast.Str: lambda env, s: s,
-    ast.Subscript: lambda env, ctx, value, slice: slices[type(slice)](env=env,value_ = value, **dict(ast.iter_fields(slice))),
-    ast.Name: lambda env, ctx, id: env[id],# if id in env else raise_("name '%s' is not defined" % id),
+    ast.Subscript: lambda env, ctx, value, slice_:
+        slices[type(slice_)](env=env, value_=value, **dict(ast.iter_fields(slice_))),
+    ast.Name: lambda env, ctx, id_: env[id_],
     ast.List: lambda env, ctx, elts: list(eval_expr(elt, env) for elt in elts),
     ast.Tuple: lambda env, ctx, elts: tuple(eval_expr(elt, env) for elt in elts),
     ast.NameConstant: lambda env, value: value,
-    ast.Attribute: lambda env, value, attr, ctx: (getattr(eval_expr(value,env),attr) if isinstance(value,ast.Attribute) else getattr(eval_expr(value,env),attr)) if not attr.startswith("__") else raise_("access to private fields is restricted"),
+    ast.Attribute: lambda env, value, attr, ctx:
+    (getattr(eval_expr(value, env), attr) if isinstance(value, ast.Attribute) else getattr(eval_expr(value, env), attr))
+    if not attr.startswith("__") else raise_("access to private fields is restricted"),
 }
 
 
@@ -105,12 +115,13 @@ localenv = {}
 userenv = defaultdict(AttrDict)
 
 
-def attrpath (node):
+def attrpath(node):
     if isinstance(node, ast.Attribute):
         first, rest = attrpath(node.value)
-        return first, (node.attr + (("." + rest) if rest else ""))
+        return first, rest + [node.attr]
     else:
-        return node.id, ""
+        return node.id, []
+
 
 def eval_(expr, msg):
     env = localenv.copy()
@@ -119,9 +130,9 @@ def eval_(expr, msg):
     for stmt_or_expr in ast.parse(expr, mode='single').body:
         response = None
         if isinstance(stmt_or_expr, ast.Expr):
-            response = eval_expr(stmt_or_expr.value, env)
+            response = timed(eval_expr, args=(stmt_or_expr.value, env))
         elif isinstance(stmt_or_expr, ast.Assign):
-            env = eval_Assign(stmt_or_expr, env, msg)
+            env = eval_assign(stmt_or_expr, env, msg)
         else:
             raise Exception(ast.dump(stmt_or_expr))
 
@@ -129,26 +140,28 @@ def eval_(expr, msg):
             yield response
 
 
-def eval_Assign(node, env, msg):
-    val = eval_expr(node.value, env)
+def eval_assign(node, env, msg):
+    val = timed(eval_expr, args=(node.value, env))
     for x in node.targets:
-        if isinstance(x,ast.Attribute):
+        if isinstance(x, ast.Attribute):
             first, rest = attrpath(x)
             if first == msg.nick:
-                attr = eval_expr(x.value, userenv)
-                setattr(userenv[first] ,x.attr,val)
+                obj = userenv[first]
+                for attr in rest[:-1]:
+                    obj = getattr(obj, attr)
+                setattr(obj, x.attr, val)
             elif first in userenv:
                 raise Exception("I'm afraid I can't let you do that.")
             else:
-                setattr(eval_expr(x.value, localenv),x.attr,val)
-        elif isinstance(x,ast.Name):
+                setattr(timed(eval_expr, args=(x.value, localenv)), x.attr, val)
+        elif isinstance(x, ast.Name):
             if x.id in globalenv:
                 env[x.id] = val
             else:
                 localenv[x.id] = val
                 env[x.id] = val
         elif isinstance(x, ast.Subscript):
-            pass
+            raise Exception(ast.dump(x))
         else:
             raise Exception(ast.dump(x))
     return env
@@ -156,7 +169,7 @@ def eval_Assign(node, env, msg):
 
 def eval_expr(node, env):
     if type(node) in exprs:
-        return timed(exprs[type(node)], kwargs=ChainMap({"env":env},dict(ast.iter_fields(node))),proc=False)
+        return exprs[type(node)](**ChainMap({"env": env}, dict(ast.iter_fields(node))))
     else:
         try:
             raise Exception(ast.dump(node))
@@ -168,9 +181,26 @@ def lambda_(args, body, env):
     fields = dict(ast.iter_fields(args))
     fields['defaults'] = [eval_expr(default, env) for default in args.defaults]
     if "kwonlyargs" in fields:
-        fields["kw_defaults"] = [eval_expr(kw_default, env) if kw_default is not None else None for kw_default in args.kw_defaults]
+        fields["kw_defaults"] = [eval_expr(kw_default, env) if
+                                 kw_default is not None else None
+                                 for kw_default in args.kw_defaults]
         fields["kw_defaults_"] = args.kw_defaults
-    return lambda *args, **kwargs: eval_expr(body, getenv(funcname="<lambda>",call_args=args, call_kwargs=kwargs, env=env, **fields))
+    return Lambda(body, env, fields)
+
+
+class Lambda():
+    def __init__(self, body, env, fields):
+        self.body = body
+        self.env = env
+        self.fields = fields
+
+    def __call__(self, *args, **kwargs):
+        env = self.env.copy()
+        env.update(globalenv)
+        env.update(userenv)
+        env.update(localenv)
+        return eval_expr(self.body, getenv(funcname="<lambda>", call_args=args, call_kwargs=kwargs,
+                                                    env=env, **self.fields))
 
 
 def compare_(left, ops, comparators, env):
@@ -190,8 +220,8 @@ def call_(func, args, starargs, keywords, kwargs, env):
     return eval_expr(func, env)(*args2, **kwargs2)
 
 
-def bind_name(id, ctx, rhs, env):
-    env[id] = rhs
+def bind_name(id_, ctx, rhs, env):
+    env[id_] = rhs
 
 
 def bind_iter(elts, ctx, rhs, env):
@@ -232,7 +262,7 @@ def generate(gens, env):
 
 
 def getenv(funcname, args, vararg, kwarg, defaults, call_args, call_kwargs, env,
-           kwonlyargs=[], kw_defaults=[], kw_defaults_=[]):
+           kwonlyargs=None, kw_defaults=None, kw_defaults_=None):
 
     subenv = OrderedDict()
 
@@ -272,8 +302,9 @@ def getenv(funcname, args, vararg, kwarg, defaults, call_args, call_kwargs, env,
     if not kwonlyargs:
         for param, default in zip(args[::-1], defaults[::-1]):
             bind(param, default, newenv)
-    for param, default in [(p, d) for p, ds, d in zip(kwonlyargs, kw_defaults_, kw_defaults) if ds]:
-        bind(param, default, newenv)
+    else:
+        for param, default in [(p, d) for p, ds, d in zip(kwonlyargs, kw_defaults_, kw_defaults) if ds]:
+            bind(param, default, newenv)
     newenv.update(subenv)
     kwmissing = []
     posmissing = []
@@ -287,13 +318,13 @@ def getenv(funcname, args, vararg, kwarg, defaults, call_args, call_kwargs, env,
         raise TypeError("%s() missing %s required positional argument" % (funcname, len(posmissing)) + "%s: %s" %
                         ("s" if len(posmissing) > 1 else "",
                          "'%s'" % posmissing[0] +
-                         ((", " +", ".join(["'%s'" % x for x in posmissing[1:-1]])) if len(posmissing) > 2 else "") +
+                         ((", " + ", ".join(["'%s'" % x for x in posmissing[1:-1]])) if len(posmissing) > 2 else "") +
                          (" and '%s'" % posmissing[-1] if len(posmissing) > 1 else "")))
     if kwmissing:
         raise TypeError("%s() missing %s required keyword-only argument" % (funcname, len(kwmissing)) + "%s: %s" %
                         ("s" if len(kwmissing) > 1 else "",
                          "'%s'" % kwmissing[0] +
-                         ((", " +", ".join(["'%s'" % x for x in kwmissing[1:-1]])) if len(kwmissing) > 2 else "") +
+                         ((", " + ", ".join(["'%s'" % x for x in kwmissing[1:-1]])) if len(kwmissing) > 2 else "") +
                          (" and '%s'" % kwmissing[-1] if len(kwmissing) > 1 else "")))
     for key, value in env.items():
         if key not in newenv:
@@ -302,7 +333,7 @@ def getenv(funcname, args, vararg, kwarg, defaults, call_args, call_kwargs, env,
 
 
 @plugin
-class eval:
+class Eval:
     @command("calc")
     @command(">")
     def calc(self, message):
@@ -310,5 +341,5 @@ class eval:
             yield message.reply(repr(response))
 
     @command("liteval")
-    def liteval(selfself, message):
+    def liteval(self, message):
         yield message.reply(repr(ast.literal_eval(message.text.strip())))

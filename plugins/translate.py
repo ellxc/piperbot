@@ -1,6 +1,6 @@
 import urllib.request, urllib.error, urllib.parse
 import json
-from plugins.stuff.BasePlugin import *
+from wrappers import *
 
 @plugin(desc="google translator")
 class Google():

@@ -6,7 +6,6 @@ from queue import PriorityQueue, Empty
 import inspect
 from serverconnection import ServerConnection
 import importlib
-import imp
 import os
 import string
 import json
@@ -29,7 +28,7 @@ class PiperBot(threading.Thread):
 
         self.worker_pool = ThreadPool(processes=4)
 
-        self.message_buffer = defaultdict(lambda: defaultdict(lambda:deque(maxlen=20)))
+        self.message_buffer = defaultdict(lambda: defaultdict(lambda:deque(maxlen=50)))
         self.buffer_pattern = re.compile(r"(?:(\w+)|\s)(?:\^(\d+)|(\^+))")
         self.escaped_buffer_pattern = re.compile(r"\\\^")
         
@@ -76,7 +75,8 @@ class PiperBot(threading.Thread):
         if "." in plugin:
             module = "".join(plugin.split(".")[:-1])
             plugin_name = plugin.split(".")[-1]
-            temp = imp.load_source(module, os.path.dirname(os.path.abspath(__file__))+"/plugins/"+module+".py")
+            temp = importlib.machinery.SourceFileLoader(module, os.path.dirname(os.path.abspath(__file__))+"/plugins/"+module+".py").load_module()
+            print(temp)
             found = False
             for name, Class in inspect.getmembers(temp, lambda x: inspect.isclass(x) and hasattr(x, "_plugin")):
                 if name == plugin_name:
@@ -85,7 +85,8 @@ class PiperBot(threading.Thread):
             if not found:
                 raise Exception("no such plugin to load")
         else:
-            temp = imp.load_source(plugin, os.path.dirname(os.path.abspath(__file__))+"/plugins/"+plugin+".py")
+            temp = importlib.machinery.SourceFileLoader(plugin, os.path.dirname(os.path.abspath(__file__))+"/plugins/"+plugin+".py").load_module()
+            print()
             found = False
             for name, Class in inspect.getmembers(temp, lambda x: inspect.isclass(x) and hasattr(x, "_plugin")):
                 self.load_plugin(Class)
@@ -97,7 +98,6 @@ class PiperBot(threading.Thread):
         found = False
         plugins = []
         for plugin_name, plugin in self.plugins.items():
-            print(plugin_name)
             if plugin_name.startswith(module_name + ".") or plugin_name == module_name:
                 plugins.append(plugin_name)
                 found = True
@@ -184,36 +184,42 @@ class PiperBot(threading.Thread):
         triggered = []
         for plugin in self.plugins.values():
             if message.command == "PRIVMSG":
-                for regex, func in plugin._regexes:
+                for regex, rfunc in plugin._regexes:
                     match = regex.match(message.text)
                     if match:
-                        triggered.append(func)
-            for trigger, func in plugin._triggers:
-                if trigger(message,bot):
-                    triggered.append(func)
+                        triggered.append(rfunc)
+            for trigger, tfunc in plugin._triggers:
+                if trigger(message, bot):
+                    triggered.append(tfunc)
+            for event, efunc in plugin._handlers:
+                if message.command.lower() == event.lower():
+                    triggered.append(efunc)
 
         self.worker_pool.map_async(lambda x: self.handle_responses(x(message)), triggered, error_callback=lambda e: print("error: " + str(e)))
 
     def send(self, message):
         if message.server in self.servers:
             print(">> " + str(message))
-            self.servers[message.server].out_queue.put(message)
+            line = message.to_line()
+            if not line.endswith("\n"):
+                line += "\n"
+            self.servers[message.server].socket.send(line.encode())
             if message.command == "PRIVMSG":
                 self.message_buffer[message.server][message.params].appendleft(message)
         else:
-            raise Exception("no such server")
+            raise Exception("no such server: " + message.server)
                 
     def pipe(self, initial, funcs, args):
         if len(funcs) == 1:
             for x in funcs[0](initial):
                 temp = x.copy()
-                
-                formats = list(self.stringformatter.parse(args[0]))
-                
-                if len(formats) > 1 or (formats and any(map(lambda x: x is not None,formats[0][1:]))):
-                    temp.text = args[0].format(*([temp.text]*len(formats)))
-                else:
-                    temp.text = args[0] + temp.text
+                if args[0]:
+                    formats = list(self.stringformatter.parse(args[0]))
+
+                    if len(formats) > 1 or (formats and any(map(lambda x: x is not None,formats[0][1:]))):
+                        temp.text = args[0].format(*([temp.text]*len(formats)))
+                    else:
+                        temp.text = args[0] + temp.text
                 yield temp
         else:
             for y in self.pipe(initial, funcs[:-1], args[:-1]):
@@ -229,7 +235,7 @@ class PiperBot(threading.Thread):
 
                     yield temp
 
-    def handle_responses(self,response,initial=None):
+    def handle_responses(self, response, initial=None):
         if response:
             try:
                 if inspect.isgenerator(response):
@@ -239,19 +245,16 @@ class PiperBot(threading.Thread):
                     self.send(response)
             except Exception as e:
                 if initial is not None:
-                    self.send(initial.reply("error: " + str(e)))
+                    self.send(initial.reply(type(e).__name__ + (": " + str(e)) if str(e) else ""))
                 print(e)
 
 if __name__=="__main__":
     json_config = codecs.open(argv[1], 'r', 'utf-8-sig')
-    print(json_config)
-    
     config = json.load(json_config)
-    print(config)
     bot = PiperBot()
 
-    for plugin in config["plugins"]:
-        bot.load_plugin_from_module(plugin)
+    for plugin_ in config["plugins"]:
+        bot.load_plugin_from_module(plugin_)
 
     for server in config["servers"]:
         server_name = server["IRCNet"]
@@ -264,6 +267,5 @@ if __name__=="__main__":
         autojoin = server["AutoJoin"]
         admins = server["Admins"]
         usessl = server["UseSSL"]
-        print((server_name, network, port, nick, autojoin, admins, password, user, name, usessl))
         bot.connect_to(server_name, network, port, nick, autojoin, admins, password, user, name, usessl)
     bot.run()
