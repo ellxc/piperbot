@@ -29,7 +29,7 @@ class PiperBot(threading.Thread):
         self.worker_pool = ThreadPool(processes=4)
 
         self.message_buffer = defaultdict(lambda: defaultdict(lambda:deque(maxlen=50)))
-        self.buffer_pattern = re.compile(r"(?:(\w+)|\s)(?:\^(\d+)|(\^+))")
+        self.buffer_pattern = re.compile(r"(?:([a-z_\-\[\]^{}|`][a-z0-9_\-\[\]^{}|`]*)|\s)(?:\^(\d+)|(\^+))", flags=re.IGNORECASE)
         self.escaped_buffer_pattern = re.compile(r"\\\^")
         
         self.stringformatter = string.Formatter()
@@ -146,7 +146,7 @@ class PiperBot(threading.Thread):
                 funcs = []
                 args = []
                 valid = False
-                if splits and splits[0].split()[0].strip() and splits[0].split()[0].strip() in self.commands:
+                if splits and splits[0] and splits[0].split()[0].strip() and splits[0].split()[0].strip() in self.commands:
                     command = splits[0].split()[0].strip()
                     if self.commands[command][1].get("adminonly", False) and message.nick not in self.admins[message.server]:
                         valid = False
