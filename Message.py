@@ -6,11 +6,12 @@ import re
 SPLIT_REGEX = r"^(?::(?:(?:(?P<nick>\S+)!)?(?:(?P<user>\S+)@)?(?P<domain>\S+) +))?" \
               r"(?P<command>\S+)(?: +(?!:)(?P<params>.+?))?(?: *:(?P<action>\x01ACTION )?(?P<text>.+?))?\x01?$"
 
+
 class Message():
-    def __init__(self, server=None, nick="", user="", domain="", command="", params="", action="", text=""
-                 , timestamp=None, groups = None):
+    def __init__(self, server=None, nick="", user="", domain="", command="", params="", action="", text=None
+                 , timestamp=None, groups=None, data=None):
         self.server = server
-        #self.channel = channel
+        # self.channel = channel
         self.nick = nick
         self.user = user
         self.domain = domain
@@ -20,23 +21,26 @@ class Message():
         self._text = text
         self.timestamp = timestamp or datetime.datetime.now()
         self.groups = groups
+        self.data = data
 
     @property
     def text(self):
-        #if self.action and self.command == "PRIVMSG" or self.command == "ACTION":
-        #    return "\001ACTION " +self._text +"\001"
-        #else:
+        if self._text is None:
+            if self.data is not None:
+                return repr(self.data)
+            else:
+                return ""
         return self._text
 
     @text.setter
-    def text(self,val):
+    def text(self, val):
         if val.startswith("\001ACTION"):
             val = val[6:]
             self.action = True
-            
+
             if val.endswith("\001"):
                 val = val[:-1]
-    
+
         self._text = val
 
     @property
@@ -51,25 +55,28 @@ class Message():
         self._command = val
 
     def to_line(self):
-        return "%s %s :%s%s%s" % (self.command,self.params,("\001ACTION " if self.action else ""),self.text,("\001" if self.action else ""))
+        text = self.text.replace("\r", "").replace("\n", "")
+        return "%s %s :%s%s%s" % (
+        self.command, self.params, ("\001ACTION " if self.action else ""), text, ("\001" if self.action else ""))
 
-    def reply(self, text=None):
-        return Message(server=self.server, nick=self.nick, command=self.command, 
-        domain=self.domain, action=self.action, groups=self.groups, 
-        params=self.params, text=text if text is not None else self.text)
+    def reply(self, text=None, data=None):
+        return Message(server=self.server, nick=self.nick, command=self.command,
+                       domain=self.domain, action=self.action, groups=self.groups, user=self.user,
+                       params=self.params, text=text, data=data)
 
     def copy(self):
         return copy.copy(self)
 
     def __lt__(self, other):
         return (self.command.lower() == "ping" and not other.command.lower() == "ping") \
-                or self.timestamp < other.timestamp
+               or self.timestamp < other.timestamp
 
     def __str__(self):
         return "{}: {}{} {} {}:{}".format(self.server, str(self.timestamp)[:-7],
-                                        (" <" + self.nick + "(" + self.user + ("@" if self.user else "")
-                                         + self.domain + ")>")
-                if self.domain else "", "ACTION " if self.action else self.command, self.params, self.text)
+                                          (" <" + self.nick + "(" + self.user + ("@" if self.user else "")
+                                           + self.domain + ")>")
+                                          if self.domain else "", "ACTION " if self.action else self.command,
+                                          self.params, self.text)
 
 
     @staticmethod
@@ -77,10 +84,10 @@ class Message():
         if not line:
             return
         else:
-            return Message("",*re.match(SPLIT_REGEX,line).groups(""))
+            return Message("", *re.match(SPLIT_REGEX, line).groups(""))
 
     @staticmethod
-    def is_ping(msg,bot):
+    def is_ping(msg, bot):
         return msg.command == "PING"
 
     @staticmethod

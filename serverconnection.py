@@ -2,16 +2,18 @@ import socket
 from queue import PriorityQueue
 import threading
 import re
-from Message import Message
-import time
 from ssl import wrap_socket
-import events
+
+from Message import Message
+
 
 SPLIT_REGEX = r"^(?::(?:(?:(?P<nick>\S+)!)?(?:(?P<user>\S+)@)?(?P<domain>\S+) +))?" \
               r"(?P<command>\S+)(?: +(?!:)(?P<params>.+?))?(?: *:(?P<action>\x01ACTION )?(?P<text>.+?))?\x01?$"
-              
+
+
 class ServerConnection():
-    def __init__(self, queue, name, network, port, nick, password=None, username=None, ircname = None, auto_join_channels=None,ssl=False):
+    def __init__(self, queue, name, network, port, nick, password=None, username=None, ircname=None,
+                 auto_join_channels=None, ssl=False):
         self.in_queue = queue
         self.out_queue = PriorityQueue()
         self.connected = False
@@ -27,23 +29,23 @@ class ServerConnection():
 
         self.handlers = dict()
 
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket = socket.socket()
         if self.ssl:
             self.socket = wrap_socket(self.socket)
         self.socket.bind(('', 0))
         self.in_thread = self.InThread(self)
 
-
     def connect(self):
+        self.connected = True
         self.socket.connect((self.network, self.port))
         self.in_thread.start()
         if self.password:
             self.socket.send(("PASS " + self.password + "\r\n").encode())
-        self.socket.send(('NICK '+self.nick+'\r\n').encode())
-        self.socket.send((" ".join(['USER ', self.user, "0", "*" ,":Piperbot" ]) + '\r\n').encode())
-        
+        self.socket.send(('NICK ' + self.nick + '\r\n').encode())
+        self.socket.send((" ".join(['USER ', self.user, "0", "*", ":Piperbot"]) + '\r\n').encode())
+
     def reconnect(self):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket = socket.socket()
         if self.ssl:
             self.socket = wrap_socket(self.socket)
         self.socket.bind(('', 0))
@@ -65,21 +67,24 @@ class ServerConnection():
             while True:
                 try:
                     data = self.socket.recv(4096)
-                    lines = data.decode().strip().split("\r\n")
-                    for line in lines:
-                        if line:
-                            msg = Message(self.server_name, *self.message_splitter.match(line).groups(""))
-                            self.in_queue.put(msg)
+                    try:
+                        data = data.decode()
+                        lines = data.strip().split("\r\n")
+                        for line in lines:
+                            if line:
+                                msg = Message(self.server_name, *self.message_splitter.match(line).groups(""))
+                                self.in_queue.put(msg)
+                    except Exception as e:
+                        print("ERROR IN " + self.name + " INTHREAD, " + str(e))
                 except Exception as e:
-                    print("ERROR IN " + self.name+" IN THREAD, " + str(e))
+                    print("ERROR IN " + self.name + " INTHREAD, " + str(e))
                     if self.serverconnection.connected:
                         self.onError()
                     break
-                    
 
-                
+
     def disconnect(self, message=""):
-        self.socket.send(('QUIT '+message+'\r\n').encode())
+        self.socket.send(('QUIT ' + message + '\r\n').encode())
         self.socket.close()
         self.connected = False
 

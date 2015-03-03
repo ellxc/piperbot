@@ -1,9 +1,11 @@
 import ast
 import math
 from collections import OrderedDict, defaultdict, ChainMap
+import pickle
+import datetime
+
 from wrappers import *
 import pymongo
-import pickle
 
 
 class AttrDict(dict):
@@ -64,9 +66,9 @@ compares = {
 
 slices = {
     ast.Slice: lambda env, expr, lower, upper, step:
-        expr[eval_expr(lower, env):eval_expr(upper, env):eval_expr(step, env)],
-    ast.Index: lambda env, value, expr = None, value_ = None:
-        expr[eval_expr(value, env)] if expr is not None else eval_expr(value_, env)[eval_expr(value, env)],
+    expr[eval_expr(lower, env):eval_expr(upper, env):eval_expr(step, env)],
+    ast.Index: lambda env, value, expr=None, value_=None:
+    expr[eval_expr(value, env)] if expr is not None else eval_expr(value_, env)[eval_expr(value, env)],
 }
 
 exprs = {
@@ -76,7 +78,7 @@ exprs = {
     ast.Lambda: lambda env, args, body: lambda_(args, body, env),
     ast.IfExp: lambda env, test, body, orelse: eval_expr(body, env) if eval_expr(test, env) else eval_expr(orelse, env),
     ast.Dict: lambda env, keys, values: {eval_expr(key, env):
-                                         eval_expr(value, env) for key, value in zip(keys, values)},
+                                             eval_expr(value, env) for key, value in zip(keys, values)},
     ast.Set: lambda env, elts: {eval_expr(elt, env) for elt in elts},
     ast.ListComp: lambda env, elt, generators: [eval_expr(elt, genenv) for genenv in generate(generators, env)],
     ast.SetComp: lambda env, elt, generators: {eval_expr(elt, genenv) for genenv in generate(generators, env)},
@@ -86,8 +88,8 @@ exprs = {
     ast.Call: lambda env, func, args, starargs, keywords, kwargs: call_(func, args, starargs, keywords, kwargs, env),
     ast.Num: lambda env, n: n,
     ast.Str: lambda env, s: s,
-    ast.Subscript: lambda env, ctx, value, slice_:
-        slices[type(slice_)](env=env, value_=value, **dict(ast.iter_fields(slice_))),
+    ast.Subscript: lambda env, ctx, value, slice:
+    slices[type(slice)](env=env, value_=value, **dict(ast.iter_fields(slice))),
     ast.Name: lambda env, ctx, id: env[id],
     ast.List: lambda env, ctx, elts: list(eval_expr(elt, env) for elt in elts),
     ast.Tuple: lambda env, ctx, elts: tuple(eval_expr(elt, env) for elt in elts),
@@ -96,6 +98,105 @@ exprs = {
     (getattr(eval_expr(value, env), attr) if isinstance(value, ast.Attribute) else getattr(eval_expr(value, env), attr))
     if not attr.startswith("__") else raise_("access to private fields is restricted"),
 }
+
+str_boolops = {
+    ast.And: " and ",
+    ast.Or: " or ",
+}
+
+str_binops = {
+    ast.Add: "+",
+    ast.Sub: "-",
+    ast.Mult: "*",
+    ast.Div: "/",
+    ast.Mod: "%",
+    ast.Pow: "**",
+    ast.LShift: "<<",
+    ast.RShift: ">>",
+    ast.BitOr: "|",
+    ast.BitXor: "^",
+    ast.BitAnd: "&",
+    ast.FloorDiv: "//",
+}
+
+str_unaryops = {
+    ast.Invert: "~",
+    ast.Not: "not ",
+    ast.UAdd: "+",
+    ast.USub: "-",
+}
+
+str_compares = {
+    ast.Eq: "==",
+    ast.NotEq: "!=",
+    ast.Lt: "<",
+    ast.LtE: "<=",
+    ast.Gt: ">",
+    ast.GtE: ">=",
+    ast.Is: " is ",
+    ast.IsNot: " is not ",
+    ast.In: " in ",
+    ast.NotIn: " not in ",
+}
+
+str_slices = {
+    ast.Slice: lambda expr, lower, upper, step: str(expr) + "[" + ast_to_string(lower) + ((":" + ast_to_string(upper) +
+                                                                                           ((":" + ast_to_string(step))
+                                                                                            if step != 1 else ""))
+                                                                                          if upper else "") + "]",
+    ast.Index: lambda value, expr=None, value_=None:
+    (str(expr) + "[" + ast_to_string(value) + "]") if expr is not None else (
+        ast_to_string(value_) + "[" + ast_to_string(value) + "]"),
+}
+
+str_exprs = {
+    ast.BoolOp: lambda op, values: str_boolops[type(op)].join(map(ast_to_string, values)),
+    ast.BinOp: lambda op, left, right: ast_to_string(left) + str_binops[type(op)] + ast_to_string(right),
+    ast.UnaryOp: lambda op, operand: str_unaryops[type(op)] + ast_to_string(operand),
+    ast.Lambda: lambda args, body: "lambda " + ",".join(
+        [x.arg for y in dict(ast.iter_fields(args)).values() if y for x in y]) + ": " + ast_to_string(body),
+    ast.IfExp: lambda test, body, orelse: ast_to_string(body) + " if " + ast_to_string(test) + " else " + ast_to_string(
+        orelse),
+    ast.Dict: lambda keys, values: "{" + ", ".join([ast_to_string(key) + ":" +
+                                                    ast_to_string(value) for key, value in zip(keys, values)]) + "}",
+    ast.Set: lambda elts: "{" + ",".join([ast_to_string(elt) for elt in elts]) + "}",
+    ast.ListComp: lambda elt, generators: "list comp",
+    # "[" + ",".join([eval_expr(elt, genenv) for genenv in generate(generators)]) +"]",
+    ast.SetComp: lambda elt, generators: "set comp",
+    # {eval_expr(elt, genenv) for genenv in generate(generators, env)},
+    ast.DictComp: lambda key, value, generators: "dict comp",
+    # {eval_expr(key, genenv): eval_expr(value, genenv) for genenv in generate(generators, env)},
+    ast.Compare: lambda left, ops, comparators: ast_to_string(left) + "".join(
+        [str_compares[type(op)] + ast_to_string(compar) for op, compar in zip(ops, comparators)]),
+    ast.Call: lambda func, args, starargs, keywords, kwargs:
+    ast_to_string(func) + "(" + ",".join(
+        (list(map(ast_to_string, args)) if args else []) + (list(map(ast_to_string, starargs)) if starargs else []) + [
+            a + "=" + ast_to_string(b) for a, b in [(keyword.arg, keyword.value) for keyword in keywords]]) + ")",
+    # + kwargs]),
+    ast.Num: lambda n: str(n),
+    ast.Str: lambda s: "'" + s + "'",
+    ast.Subscript: lambda ctx, value, slice:
+    str_slices[type(slice)](value_=value, **dict(ast.iter_fields(slice))),
+    ast.Name: lambda ctx, id: id,
+    ast.List: lambda ctx, elts: "[" + ",".join(map(ast_to_string, elts)) + "]",
+    ast.Tuple: lambda ctx, elts: "(" + ",".join([ast_to_string(elt) for elt in elts]) + ")",
+    ast.NameConstant: lambda value: str(value),
+    ast.Attribute: lambda value, attr, ctx: value + "." + attr,
+}
+
+
+def ast_to_string(node):
+    if type(node) in str_exprs:
+        try:
+            return str_exprs[type(node)](**dict(ast.iter_fields(node)))
+        except Exception as e:
+            raise e
+            return str(type(node))
+    else:
+        try:
+            raise Exception(ast.dump(node))
+        except TypeError:
+            raise Exception(node)
 
 
 globalenv = {
@@ -110,6 +211,10 @@ globalenv = {
     "pi": math.pi,
     "ord": ord,
     "chr": chr,
+    "datetime": datetime.datetime,
+    "date": datetime.date,
+    "time": datetime.time,
+    "timedelta": datetime.timedelta,
 }
 
 localenv = {}
@@ -202,7 +307,11 @@ class Lambda():
         env.update(userenv)
         env.update(localenv)
         return eval_expr(self.body, getenv(funcname="<lambda>", call_args=args, call_kwargs=kwargs,
-                                                    env=env, **self.fields))
+                                           env=env, **self.fields))
+
+    def __repr__(self):
+        return "lambda " + ",".join([x.arg for y in self.fields.values() if y for x in y]) + ": " + ast_to_string(
+            self.body)
 
 
 def compare_(left, ops, comparators, env):
@@ -222,8 +331,8 @@ def call_(func, args, starargs, keywords, kwargs, env):
     return eval_expr(func, env)(*args2, **kwargs2)
 
 
-def bind_name(id_, ctx, rhs, env):
-    env[id_] = rhs
+def bind_name(id, ctx, rhs, env):
+    env[id] = rhs
 
 
 def bind_iter(elts, ctx, rhs, env):
@@ -265,7 +374,6 @@ def generate(gens, env):
 
 def getenv(funcname, args, vararg, kwarg, defaults, call_args, call_kwargs, env,
            kwonlyargs=None, kw_defaults=None, kw_defaults_=None):
-
     subenv = OrderedDict()
 
     for param, arg in zip(args, call_args):
@@ -336,29 +444,27 @@ def getenv(funcname, args, vararg, kwarg, defaults, call_args, call_kwargs, env,
 
 @plugin
 class Eval:
-
     @on_load
     def init(self):
         con = pymongo.MongoClient()
         db = con["seval"]
         for table in db.collection_names():
-            for record in db[table].find({ "bin": { "$exists": True } }):
-                print(record)
+            for record in db[table].find({"bin": {"$exists": True}}):
                 userenv[table][record["key"]] = pickle.loads(record["bin"])
-    
-    @on_unload    
+
+    @on_unload
     def save(self):
         con = pymongo.MongoClient()
         db = con["seval"]
-        for user,space in userenv.items():
-            for key,val in space.items():
-                db[user].insert({"key":key,"bin":pickle.dumps(val)})
-                
+        for user, space in userenv.items():
+            for key, val in space.items():
+                db[user].insert({"key": key, "bin": pickle.dumps(val)})
+
     @command("calc")
     @command(">")
     def calc(self, message):
         for response in eval_(message.text.strip(), message):
-            yield message.reply(repr(response))
+            yield message.reply(data=response)
 
     @command("liteval")
     def liteval(self, message):

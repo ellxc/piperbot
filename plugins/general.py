@@ -10,7 +10,7 @@ def lup():
 @plugin(desc="general")
 class general():
 
-    sedcommand = re.compile(r"s([:/%|\!@,])((?:(?!\1)[^\\]|\\.)*)\1((?:(?!\1)[^\\]|\\.)*)\1?([gi]*) ?(.*)")
+    sedcommand = re.compile(r"s/((?:[^\\/]|\\.)*)/((?:[^\\/]|\\.)*)/([gi]*)(?: (.*))?")
     itersplit = re.compile(r'(?:"[^"]*"|[^ ]+)')
 
 
@@ -26,7 +26,7 @@ class general():
 
     @command("echo")
     def echo(self, message):
-        yield message
+        yield message.reply(message.text)
 
     @command("caps")
     @command("upper")
@@ -98,7 +98,7 @@ class general():
     def help(self, message):
         """help <command>   -> returns the help for the specified command
             derp derp derp
-        
+
         """
         try:
             com = message.text.split()[0]
@@ -110,21 +110,27 @@ class general():
             yield message.reply("No help found for specified command")
         else:
             yield message.reply(doc.split("\r\n")[0])
-        
+
+    @command
+    def strip(self,message):
+        yield message.reply(message.text.strip())
+
+    @command
+    def blank(self,message):
+        yield message.reply("",data=message.data)
 
 
-
-    @regex(r"^s([:/%|\!@,])((?:(?!\1)[^\\]|\\.)*)\1((?:(?!\1)[^\\]|\\.)*)\1?([gi]*)")
+    @regex(r"^s/((?:[^\\/]|\\.)*)/((?:[^\\/]|\\.)*)/([gi]*)")
     @command("sed")
     def sed(self, message):
         text = None
         if message.groups:
             print(message.groups)
-            delim, find, sub, flags = message.groups
+            find, sub, flags = message.groups
         else:
             match = self.sedcommand.search(message.text)
             if match:
-                 delim, find, sub, flags, text = match.groups()
+                find, sub, flags, text = match.groups()
             
         if message.groups or match:
             sub = re.sub(r"\\/", "/", sub, count=0)

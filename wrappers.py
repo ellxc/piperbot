@@ -4,11 +4,12 @@ from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
 from multiprocessing import TimeoutError
 
-def plugin(desc=None):
+def plugin(desc=None, thread=False):
     def wrapper(clas):
         clas._plugin = True
         clas._plugin_desc = desc
         clas._plugin__init__ = _plugin__init__
+        clas._plugin_thread = thread
         return clas
     if inspect.isclass(desc):
         return wrapper(desc)
@@ -44,7 +45,7 @@ def command(name=None, **kwargs):
     def wrapper(func):
         if not hasattr(func, '_commands'):
             func._commands = []
-        func2 = dict(kwargs, command=name if not inspect.isfunction(name) else func.__name__)
+        func2 = dict(kwargs, command=name if not inspect.isfunction(name) and name is not None else func.__name__)
         func._commands.append(func2)
         return func        
     if inspect.isfunction(name):
