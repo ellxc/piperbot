@@ -38,3 +38,7 @@ General functions of the bot.
 
 ### `markov`
 Talks.
+
+### `Seval`
+a meta circular evaluator, or a python interpreter written in python.
+bit complicated!
