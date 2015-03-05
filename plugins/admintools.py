@@ -6,6 +6,13 @@ class AdminTools:
     def __init__(self):
         self.connect_regex = re.compile("(?:(\w+): )?(\S+):(\d+)(?: (#\w+(?: +#\w+)*))?")
 
+    @command(groups="^(\S+)$", adminonly=True)
+    def nick(self, message):
+        x = message.copy()
+        x.nick = message.groups[0]
+        x.text = None
+        yield x
+
     @command("connect", adminonly=True)
     def connect(self, message):
         match = self.connect_regex.match(message.text)
@@ -83,9 +90,10 @@ class AdminTools:
     @command("eval", adminonly=True)
     def eval(self, message):
         try:
-            yield message.reply(str(eval(message.text)))
+            result = eval(message.text)
+            yield message.reply(str(result),result)
         except Exception as e:
-            yield message.reply(str(e))
+            yield message.reply(str(type(e)) + ": " + str(e))
 
     @command("exec", adminonly=True)
     def execer(self, message):

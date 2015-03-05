@@ -3,6 +3,10 @@ import datetime
 
 from wrappers import *
 from Message import Message
+from dateutil import parser
+import pymongo
+import dill
+
 
 
 @plugin(thread=True)
@@ -13,22 +17,49 @@ class Reminders(Thread):
         self.event = Event()
         self.ticking = False
 
+    @on_load
+    def init(self):
+        con = pymongo.MongoClient()
+        db = con["reminders"]
+        for reminder_ in db["reminders"].find():
+            self.reminders.append(dill.loads(reminder_["reminder"]))
+        self.reminders.sort()
+        db.reminders.remove({})
+
     @on_unload
     def stop(self):
         self.ticking = False
         self.event.set()
+        con = pymongo.MongoClient()
+        db = con["reminders"]
+        for reminder in self.reminders:
+            db["reminders"].insert({"reminder": dill.dumps(reminder)})
+
+    @command("date")
+    def parse(self, message):
+        date = parser.parse(message.text)
+        #date = datetime_(date.year,date.month,date.day,date.hour,date.minute,date.second,date.microsecond,date.tzinfo)
+        yield message.reply(text=str(date),data=date)
+
+    @command
+    def reminders(self, message):
+        reminders = []
+        for reminder_ in self.reminders:
+            if message.nick == reminder_.set_for:
+                reminders.append(reminder_)
+
 
     @command(pipable=False)
     def remind(self, message):
         if message.data:
             if isinstance(message.data, datetime.datetime):
                 self.reminders.append(reminder(message.nick, message.nick, datetime.datetime.today(),
-                                               message.data, message.text, message.params,
+                                               message.data, message._text or "", message.params,
                                                message.server))
                 yield message.reply("reminder set for %s!" % str(message.data))
             elif isinstance(message.data, datetime.timedelta):
                 self.reminders.append(reminder(message.nick, message.nick, datetime.datetime.today(),
-                                               datetime.datetime.today() + message.data, message.text, message.params,
+                                               datetime.datetime.today() + message.data, message._text or "", message.params,
                                                message.server))
                 yield message.reply("reminder set to go in %s!" % str(message.data))
             else:
@@ -40,7 +71,6 @@ class Reminders(Thread):
             yield message.reply("reminder set!")
         self.reminders.sort()
         self.event.set()
-
 
     def run(self):
         self.ticking = True

@@ -1,17 +1,22 @@
 import codecs
-import re
-import time
 
 from wrappers import *
+
 
 def lup():
     while 1: pass
 
+
 @plugin(desc="general")
 class general():
-
-    sedcommand = re.compile(r"s/((?:[^\\/]|\\.)*)/((?:[^\\/]|\\.)*)/([gi]*)(?: (.*))?")
+    sedcommand = re.compile(r"s([:/%|\!@,])((?:(?!\1)[^\\]|\\.)*)\1((?:(?!\1)[^\\]|\\.)*)\1?([gi\d]*) ?(.*)")
     itersplit = re.compile(r'(?:"[^"]*"|[^ ]+)')
+
+    @command  # (groups="^(\S+)?$")
+    def pm(self, messsage):
+        x = messsage.copy()
+        x.params = messsage.nick
+        yield x
 
 
     @command("iterate", adminonly=True)
@@ -88,7 +93,7 @@ class general():
 
     @command("list")
     def list(self, message):
-        yield message.reply( "loaded plugins : " + ", ".join(self.bot.plugins.keys()) )
+        yield message.reply("loaded plugins : " + ", ".join(self.bot.plugins.keys()))
 
     @command("tr")
     def tr(self, message):
@@ -100,54 +105,53 @@ class general():
             derp derp derp
 
         """
-        try:
-            com = message.text.split()[0]
-            func = self.bot.commands[com][0]
-        except:
-            raise Exception("specifed command not found")
-        doc = func.__doc__
-        if not doc:
-            yield message.reply("No help found for specified command")
+        if message.data is not None and message._text is None:
+            yield message.reply(
+                text="not yet implemented pydoc look up. this is a %s" % message.data.__class__.__name__)
         else:
-            yield message.reply(doc.split("\r\n")[0])
+            try:
+                com = message.text.split()[0]
+                func = self.bot.commands[com][0]
+            except:
+                raise Exception("specifed command not found")
+            doc = func.__doc__
+            if not doc:
+                yield message.reply("No help found for specified command")
+            else:
+                yield message.reply(doc.split("\r\n")[0])
 
     @command
-    def strip(self,message):
+    def strip(self, message):
         yield message.reply(message.text.strip())
 
     @command
-    def blank(self,message):
-        yield message.reply("",data=message.data)
+    def blank(self, message):
+        yield message.reply("", data=message.data)
 
 
-    @regex(r"^s/((?:[^\\/]|\\.)*)/((?:[^\\/]|\\.)*)/([gi]*)")
+    @regex(r"^s([:/%|\!@,])((?:(?!\1)[^\\]|\\.)*)\1((?:(?!\1)[^\\]|\\.)*)\1([gi\d]*)")
     @command("sed")
     def sed(self, message):
         text = None
         if message.groups:
             print(message.groups)
-            find, sub, flags = message.groups
+            delim, find, sub, flags = message.groups
         else:
             match = self.sedcommand.search(message.text)
             if match:
-                find, sub, flags, text = match.groups()
-            
+                delim, find, sub, flags, text = match.groups()
+
         if message.groups or match:
             sub = re.sub(r"\\/", "/", sub, count=0)
             action = False
-            kwargs = {}
+            kwargs = {"count": 1}
             if "i" in flags:
                 kwargs["flags"] = re.IGNORECASE
-            if "g" in flags:
-                kwargs["count"] = 0
-            else:
-                kwargs["count"] = 1
             if not text:
                 for msg in list(self.bot.message_buffer[message.server][message.params])[1:]:
-                    if "i" in flags:
-                        matchobj = timed(hacky, args=(find, msg.text), kwargs={"flags": re.IGNORECASE})
-                    else:
-                        matchobj = timed(hacky, args=(find, msg.text))
+                    matchobj = timed(lambda:
+                                     bool(re.search(find, msg.text,
+                                                    **({"flags": re.IGNORECASE} if "i" in flags else {}))))
                     if matchobj:
                         text = msg.text
                         if msg.action:
@@ -157,13 +161,28 @@ class general():
                     raise Exception("No text and no matching message found")
             if not sub:
                 sub = ""
-            result = message.reply(timed(re.sub, args=(find, sub, text), kwargs=kwargs))
+            index = re.search(r".*?(\d+)", flags)
+            if "g" not in flags and index is not None:
+                index = int(index.group(1))
+                text = timed(lambda: [text[:x.start()] + x.expand(sub) + text[x.end():] for x in [[x for x, y in zip(re.finditer(find, text, **({"flags": re.IGNORECASE} if "i" in flags else {})), range(index))][-1]]][0]) # erm ... basically get the nth matchobject and do stuff
+                result = message.reply(text)
+                #result = message.reply(timed(re.sub, args=(find, replaceNthWith(index, sub), text)))    # more readable but also less efficient!
+            else:
+                if "g" in flags:
+                    kwargs["count"] = 0
+                result = message.reply(timed(re.sub, args=(find, sub, text), kwargs=kwargs))
+
             if action:
                 result.action = True
             yield result
-                        
+
         else:
             raise Exception("invalid pattern")
 
-def hacky(*x,**y):
-    return bool(re.search(*x,**y))
+
+def replaceNthWith(n, replacement):
+    def replace(match, c=[0]):
+        c[0] += 1
+        return match.expand(replacement) if c[0] == n else match.group(0)
+
+    return replace

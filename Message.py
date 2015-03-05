@@ -34,12 +34,13 @@ class Message():
 
     @text.setter
     def text(self, val):
-        if val.startswith("\001ACTION"):
-            val = val[6:]
-            self.action = True
+        if val:
+            if val.startswith("\001ACTION"):
+                val = val[6:]
+                self.action = True
 
-            if val.endswith("\001"):
-                val = val[:-1]
+                if val.endswith("\001"):
+                    val = val[:-1]
 
         self._text = val
 

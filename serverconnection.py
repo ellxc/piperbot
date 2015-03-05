@@ -64,7 +64,7 @@ class ServerConnection():
             self.serverconnection = serverconnection
 
         def run(self):
-            while True:
+            while self.serverconnection.connected:
                 try:
                     data = self.socket.recv(4096)
                     try:

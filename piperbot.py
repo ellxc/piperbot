@@ -10,6 +10,7 @@ import string
 import json
 import codecs
 from sys import argv
+from collections.abc import Iterable, Mapping
 
 from serverconnection import ServerConnection
 
@@ -39,8 +40,10 @@ class PiperBot(threading.Thread):
         self.worker_pool = ThreadPool(processes=4)
 
         self.message_buffer = defaultdict(lambda: defaultdict(lambda: deque(maxlen=50)))
-        self.buffer_pattern = re.compile(r"(?:([a-z_\-\[\]^{}|`][a-z0-9_\-\[\]^{}|`]*)|\s)(?:\^(\d+)|(\^+))", flags=re.IGNORECASE)
+        self.buffer_pattern = re.compile(r"(?:([a-z_\-\[\]^{}|`][a-z0-9_\-\[\]^{}|`]*)|\s)(?:\^(\d+)|(\^+))",
+                                         flags=re.IGNORECASE)
         self.escaped_buffer_pattern = re.compile(r"\\\^")
+        self.repr_pattern = re.compile(r"(?:[A-Z]+\.)*([A-Z]+\(.*\))", flags=re.IGNORECASE)
 
         self.stringformatter = string.Formatter()
 
@@ -70,24 +73,29 @@ class PiperBot(threading.Thread):
 
     def run(self):
         self.running = True
-        while self.running:
-            try:
-                message = self.in_queue.get(timeout=10)
-                print("<< " + str(message))
-                self.handle_message(message)
-            except Empty:
-                pass
+        try:
+            while self.running:
+                try:
+                    message = self.in_queue.get(timeout=10)
+                    print("<< " + str(message))
+                    self.handle_message(message)
+                except Empty:
+                    pass
+        finally:
+            self.shutdown()
 
     def shutdown(self):
         self.running = False
-        for plugin_name in self.plugins.keys():
-            self.unload_plugin(plugin_name)
+        for plugin in self.plugins.values():
+            for func in plugin._onUnloads:
+                func()
 
     def load_plugin_from_module(self, plugin):
         if "." in plugin:
             module = "".join(plugin.split(".")[:-1])
             plugin_name = plugin.split(".")[-1]
-            temp = importlib.machinery.SourceFileLoader(module, os.path.dirname(os.path.abspath(__file__))+"/plugins/"+module+".py").load_module()
+            temp = importlib.machinery.SourceFileLoader(module, os.path.dirname(
+                os.path.abspath(__file__)) + "/plugins/" + module + ".py").load_module()
             found = False
             for name, Class in inspect.getmembers(temp, lambda x: inspect.isclass(x) and hasattr(x, "_plugin")):
                 if name == plugin_name:
@@ -96,7 +104,8 @@ class PiperBot(threading.Thread):
             if not found:
                 raise Exception("no such plugin to load")
         else:
-            temp = importlib.machinery.SourceFileLoader(plugin, os.path.dirname(os.path.abspath(__file__))+"/plugins/"+plugin+".py").load_module()
+            temp = importlib.machinery.SourceFileLoader(plugin, os.path.dirname(
+                os.path.abspath(__file__)) + "/plugins/" + plugin + ".py").load_module()
             found = False
             for name, Class in inspect.getmembers(temp, lambda x: inspect.isclass(x) and hasattr(x, "_plugin")):
                 self.load_plugin(Class)
@@ -188,7 +197,7 @@ class PiperBot(threading.Thread):
                         break
                     else:
                         groups = self.commands[command][1].get("groups", "")
-                        funcs.append((self.commands[command][0],groups))
+                        funcs.append((self.commands[command][0], groups))
                     if len(segment.split()) > 1:
                         args.append(" ".join(segment.split()[1:]) + " ")
                     else:
@@ -206,10 +215,10 @@ class PiperBot(threading.Thread):
         for plugin in self.plugins.values():
             if message.command == "PRIVMSG":
                 for regex, rfunc in plugin._regexes:
-                    match = regex.match(message.text)
-                    temp = message.copy()
-                    if match:
-                        temp.groups = match.groups()
+                    matches = regex.findall(message.text)
+                    for groups in matches:
+                        temp = message.copy()
+                        temp.groups = groups
                         triggered.append((rfunc, temp))
             for trigger, tfunc in plugin._triggers:
                 if trigger(message, bot):
@@ -217,7 +226,8 @@ class PiperBot(threading.Thread):
             for event, efunc in plugin._handlers:
                 if message.command.lower() == event.lower():
                     triggered.append((efunc, message))
-        self.worker_pool.map_async(lambda fnc_msg: self.handle_responses(fnc_msg[0](fnc_msg[1])),triggered,error_callback=print)
+        self.worker_pool.map_async(lambda fnc_msg: self.handle_responses(fnc_msg[0](fnc_msg[1])), triggered,
+                                   error_callback=print)
 
     def send(self, message):
         if message.server in self.servers:
@@ -252,7 +262,21 @@ class PiperBot(threading.Thread):
                         formats = list(self.stringformatter.parse(args[0]))
 
                         if len(formats) > 1 or (formats and any(map(lambda x: x is not None, formats[0][1:]))):
-                            temp.text = args[0].format(*([temp.text if temp.data is None else temp.data] * len(formats)))
+                            if temp.data is not None:
+                                repr_ = self.repr_pattern.match(repr(temp.data))
+                                if repr_:
+                                    arg = [repr_.group(1)] * len(formats)
+                                    temp.text = args[0].format(*arg)
+                                else:
+                                    # if isinstance(temp.data, Mapping):
+                                    #     temp.text = args[0].format(**temp.data)
+                                    # elif isinstance(temp.data, Iterable) and not isinstance(temp.data, str):
+                                    #     temp.text = args[0].format(*temp.data)
+                                    # else:
+                                        temp.text = args[0].format(*([temp.data] * len(formats)))
+                            else:
+                                arg = [temp.text] * len(formats)
+                                temp.text = args[0].format(*arg)
                         elif temp.data is None:
                             temp.text = args[0] + temp.text
                         else:
@@ -278,7 +302,21 @@ class PiperBot(threading.Thread):
                         if args[-1] is not None:
                             formats = list(self.stringformatter.parse(args[-1]))
                             if len(formats) > 1 or (formats and any(map(lambda x: x is not None, formats[0][1:]))):
-                                temp.text = args[-1].format(*([temp.text if temp.data is None else temp.data] * len(formats)))
+                                if temp.data is not None:
+                                    repr_ = self.repr_pattern.match(repr(temp.data))
+                                    if repr_:
+                                        arg = [repr_.group(1)] * len(formats)
+                                        temp.text = args[-1].format(*arg)
+                                    else:
+                                        if isinstance(temp.data, Mapping):
+                                            temp.text = args[-1].format(**temp.data)
+                                        elif isinstance(temp.data, Iterable) and not isinstance(temp.data, str):
+                                            temp.text = args[-1].format(*temp.data)
+                                        else:
+                                            temp.text = args[-1].format(*([repr(temp.data)] * len(formats)))
+                                else:
+                                    arg = [temp.text] * len(formats)
+                                    temp.text = args[-1].format(*arg)
                             elif not temp.data:
                                 temp.text = args[-1] + temp.text
                             else:

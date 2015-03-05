@@ -3,6 +3,7 @@ import re
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
 from multiprocessing import TimeoutError
+import dill
 
 def plugin(desc=None, thread=False):
     def wrapper(clas):
@@ -75,11 +76,16 @@ def event(event_):
     return wrapper
 
 
+def run_dill_encoded(what):
+    fun, args, kwargs = dill.loads(what)
+    result = dill.dumps(fun(*args,**kwargs))
+    return result
+
 def timed(func, args=(), kwargs={}, timeout=2, proc=True):
     with (Pool if proc else ThreadPool)(processes=1) as pool:
-        result = pool.apply_async(func, args=args, kwds=kwargs)
+        result = pool.apply_async(run_dill_encoded, (dill.dumps((func,args,kwargs)),))
         try:
-            return result.get(timeout)
+            return dill.loads(result.get(timeout))
         except TimeoutError as e:
             pool.terminate()
             raise Exception("Took more than %s seconds" % timeout)

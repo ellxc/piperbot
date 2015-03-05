@@ -3,7 +3,8 @@ import math
 from collections import OrderedDict, defaultdict, ChainMap
 import pickle
 import datetime
-
+#from random import random, uniform, triangular, randint, choice, randrange, sample, shuffle, getrandbits
+import random
 from wrappers import *
 import pymongo
 
@@ -23,6 +24,36 @@ class AttrDict(dict):
     def __setattr__(self, key, value):
         self[key] = value
 
+
+class Namespace(dict):
+    """A dict subclass that exposes its items as attributes.
+
+    Warning: Namespace instances do not have direct access to the
+    dict methods.
+    copied from http://code.activestate.com/recipes/577887-a-simple-namespace-class/
+    """
+
+    def __init__(self, obj={}):
+        super().__init__(obj)
+
+    def __dir__(self):
+        return tuple(self)
+
+    def __repr__(self):
+        return "%s(%s)" % (type(self).__name__, super().__repr__())
+
+    def __getattribute__(self, name):
+        try:
+            return self[name]
+        except KeyError:
+            msg = "'%s' object has no attribute '%s'"
+            raise AttributeError(msg % (type(self).__name__, name))
+
+    def __setattr__(self, name, value):
+        self[name] = value
+
+    def __delattr__(self, name):
+        del self[name]
 
 boolops = {
     ast.And: all,
@@ -65,8 +96,8 @@ compares = {
 }
 
 slices = {
-    ast.Slice: lambda env, expr, lower, upper, step:
-    expr[eval_expr(lower, env):eval_expr(upper, env):eval_expr(step, env)],
+    ast.Slice: lambda env, lower, upper, step, value_:
+    eval_expr(value_, env)[slice(eval_expr(lower, env), eval_expr(upper, env), eval_expr(step, env))],
     ast.Index: lambda env, value, expr=None, value_=None:
     expr[eval_expr(value, env)] if expr is not None else eval_expr(value_, env)[eval_expr(value, env)],
 }
@@ -88,8 +119,8 @@ exprs = {
     ast.Call: lambda env, func, args, starargs, keywords, kwargs: call_(func, args, starargs, keywords, kwargs, env),
     ast.Num: lambda env, n: n,
     ast.Str: lambda env, s: s,
-    ast.Subscript: lambda env, ctx, value, slice:
-    slices[type(slice)](env=env, value_=value, **dict(ast.iter_fields(slice))),
+    ast.Subscript: lambda env, ctx, value, slice: #raise_(ast.dump(slice)),
+    slices[type(slice)](value_=value, env=env, **dict(ast.iter_fields(slice))),
     ast.Name: lambda env, ctx, id: env[id],
     ast.List: lambda env, ctx, elts: list(eval_expr(elt, env) for elt in elts),
     ast.Tuple: lambda env, ctx, elts: tuple(eval_expr(elt, env) for elt in elts),
@@ -140,7 +171,7 @@ str_compares = {
 }
 
 str_slices = {
-    ast.Slice: lambda expr, lower, upper, step: str(expr) + "[" + ast_to_string(lower) + ((":" + ast_to_string(upper) +
+    ast.Slice: lambda expr, lower, upper, step, value_ = None: str(expr) + "[" + ast_to_string(lower) + ((":" + ast_to_string(upper) +
                                                                                            ((":" + ast_to_string(step))
                                                                                             if step != 1 else ""))
                                                                                           if upper else "") + "]",
@@ -150,8 +181,8 @@ str_slices = {
 }
 
 str_exprs = {
-    ast.BoolOp: lambda op, values: str_boolops[type(op)].join(map(ast_to_string, values)),
-    ast.BinOp: lambda op, left, right: ast_to_string(left) + str_binops[type(op)] + ast_to_string(right),
+    ast.BoolOp: lambda op, values: "(" + str_boolops[type(op)].join(map(ast_to_string, values)) + ")",
+    ast.BinOp: lambda op, left, right: "(" + ast_to_string(left) + str_binops[type(op)] + ast_to_string(right) + ")",
     ast.UnaryOp: lambda op, operand: str_unaryops[type(op)] + ast_to_string(operand),
     ast.Lambda: lambda args, body: "lambda " + ",".join(
         [x.arg for y in dict(ast.iter_fields(args)).values() if y for x in y]) + ": " + ast_to_string(body),
@@ -199,8 +230,40 @@ def ast_to_string(node):
             raise Exception(node)
 
 
+class datetime_(datetime.datetime):
+    def __repr__(self):
+        """Convert to formal string, for repr()."""
+        L = [self.year, self.month, self.day,  # These are never zero
+             self.hour, self.minute, self.second, self.microsecond]
+        if L[-1] == 0:
+            del L[-1]
+        if L[-1] == 0:
+            del L[-1]
+        s = ", ".join(map(str, L))
+        s = "%s(%s)" % ("datetime", s)
+        if self.tzinfo is not None:
+            assert s[-1:] == ")"
+            s = s[:-1] + ", tzinfo=%r" % self.tzinfo + ")"
+        return s
+
+
+class timedelta_(datetime.timedelta):
+    def __repr__(self):
+        if self.microseconds:
+            return "%s(%d, %d, %d)" % ('timedelta',
+                                       self.days,
+                                       self.seconds,
+                                       self.microseconds)
+        if self.seconds:
+            return "%s(%d, %d)" % ('timedelta',
+                                   self.days,
+                                   self.seconds)
+        return "%s(%d)" % ('timedelta', self.days)
+
+
 globalenv = {
     'len': len,
+    'hex': hex,
     'map': map,
     'range': range,
     'str': str,
@@ -209,12 +272,16 @@ globalenv = {
     'bool': bool,
     "sin": math.sin,
     "pi": math.pi,
+    "math": math,
     "ord": ord,
     "chr": chr,
+    "random": random,
     "datetime": datetime.datetime,
     "date": datetime.date,
     "time": datetime.time,
     "timedelta": datetime.timedelta,
+    "timestamp": datetime.datetime.fromtimestamp,
+    "data": None,
 }
 
 localenv = {}
@@ -237,6 +304,7 @@ def eval_(expr, msg):
     for stmt_or_expr in ast.parse(expr, mode='single').body:
         response = None
         if isinstance(stmt_or_expr, ast.Expr):
+            #response = eval_expr(stmt_or_expr.value, env)
             response = timed(eval_expr, args=(stmt_or_expr.value, env))
         elif isinstance(stmt_or_expr, ast.Assign):
             env = eval_assign(stmt_or_expr, env, msg)
@@ -275,13 +343,16 @@ def eval_assign(node, env, msg):
 
 
 def eval_expr(node, env):
-    if type(node) in exprs:
-        return exprs[type(node)](**ChainMap({"env": env}, dict(ast.iter_fields(node))))
+    if node is not None:
+        if type(node) in exprs:
+            return exprs[type(node)](**ChainMap({"env": env}, dict(ast.iter_fields(node))))
+        else:
+            try:
+                raise Exception(ast.dump(node))
+            except TypeError:
+                raise Exception(node)
     else:
-        try:
-            raise Exception(ast.dump(node))
-        except TypeError:
-            raise Exception(node)
+        return None
 
 
 def lambda_(args, body, env):
@@ -463,8 +534,11 @@ class Eval:
     @command("calc")
     @command(">")
     def calc(self, message):
+        if message.data:
+            globalenv["data"] = message.data
         for response in eval_(message.text.strip(), message):
             yield message.reply(data=response)
+        globalenv["data"] = None
 
     @command("liteval")
     def liteval(self, message):
