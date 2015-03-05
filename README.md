@@ -6,7 +6,7 @@ A multithreaded, multi-server IRC bot written in Python.
 Pre-requisites
 --------------
 
- * Python (version >= 3.3)
+ * Python 3.x
  * MongoDB for the mongo backend.
  * dill for various things related to pickling and multiproccess
  * dateutil for reminders

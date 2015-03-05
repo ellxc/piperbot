@@ -3,7 +3,7 @@ from queue import PriorityQueue
 import threading
 import re
 from ssl import wrap_socket
-
+from select import select
 from Message import Message
 
 
@@ -54,7 +54,7 @@ class ServerConnection():
 
     class InThread(threading.Thread):
         def __init__(self, serverconnection):
-            super(ServerConnection.InThread, self).__init__(daemon=True)
+            super(ServerConnection.InThread, self).__init__()
             self.socket = serverconnection.socket
             self.in_queue = serverconnection.in_queue
             self.server_name = serverconnection.name
@@ -66,16 +66,20 @@ class ServerConnection():
         def run(self):
             while self.serverconnection.connected:
                 try:
-                    data = self.socket.recv(4096)
-                    try:
-                        data = data.decode()
-                        lines = data.strip().split("\r\n")
-                        for line in lines:
-                            if line:
-                                msg = Message(self.server_name, *self.message_splitter.match(line).groups(""))
-                                self.in_queue.put(msg)
-                    except Exception as e:
-                        print("ERROR IN " + self.name + " INTHREAD, " + str(e))
+                    readable, writable, ex = select([self.socket], [], [self.socket], timeout=1)
+                    if readable:
+                        data = readable[0].recv(4096)
+                        try:
+                            data = data.decode()
+                            lines = data.strip().split("\r\n")
+                            for line in lines:
+                                if line:
+                                    msg = Message(self.server_name, *self.message_splitter.match(line).groups(""))
+                                    self.in_queue.put(msg)
+                        except Exception as e:
+                            print("ERROR IN " + self.name + " INTHREAD, " + str(e))
+                    if ex:
+                        raise Exception("error in socket")
                 except Exception as e:
                     print("ERROR IN " + self.name + " INTHREAD, " + str(e))
                     if self.serverconnection.connected:

@@ -86,6 +86,8 @@ class PiperBot(threading.Thread):
 
     def shutdown(self):
         self.running = False
+        for server in self.servers.values():
+            server.disconnect(message="shutting down")
         for plugin in self.plugins.values():
             for func in plugin._onUnloads:
                 func()
