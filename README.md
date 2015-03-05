@@ -8,6 +8,9 @@ Pre-requisites
 
  * Python (version >= 3.3)
  * MongoDB for the mongo backend.
+ * dill for various things related to pickling and multiproccess
+ * dateutil for reminders
+ * patience it might not work completely...
  
 Running
 -------
