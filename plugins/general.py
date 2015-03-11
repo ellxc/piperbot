@@ -102,7 +102,7 @@ class general():
     @command("help")
     def help(self, message):
         """help <command>   -> returns the help for the specified command
-            derp derp derp
+           derp derp derp
 
         """
         if message.data is not None and message._text is None:
@@ -118,7 +118,7 @@ class general():
             if not doc:
                 yield message.reply("No help found for specified command")
             else:
-                yield message.reply(doc.split("\r\n")[0])
+                yield message.reply(doc.split("\n")[0])
 
     @command
     def strip(self, message):

@@ -29,12 +29,15 @@ class Karma:
     @command("karma")
     def asd(self, message):
         if message.text:
+            checked = set()
             for key in message.text.split():
-                score = self.karma[key]
-                yield message.reply("{} has {} karma!".format(key, score or "no"), score)
+                if key not in checked:
+                    checked.add(key)
+                    score = self.karma[key.lower()]
+                    yield message.reply("{} has {} karma!".format(key, score or "no"), score)
         else:
             key = message.nick
-            score = self.karma[key]
+            score = self.karma[key.lower()]
             yield message.reply("you have {} karma!".format(score or "no"), score)
 
 

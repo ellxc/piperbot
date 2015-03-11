@@ -23,6 +23,7 @@ class Message():
         self.groups = groups
         self.data = data
 
+
     @property
     def text(self):
         if self._text is None:

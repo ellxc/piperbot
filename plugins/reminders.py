@@ -37,7 +37,10 @@ class Reminders(Thread):
 
     @command("date")
     def parse(self, message):
-        date = parser.parse(message.text)
+        if message.text:
+            date = parser.parse(message.text)
+        else:
+            date = datetime.datetime.now()
         #date = datetime_(date.year,date.month,date.day,date.hour,date.minute,date.second,date.microsecond,date.tzinfo)
         yield message.reply(text=str(date),data=date)
 

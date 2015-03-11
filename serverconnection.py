@@ -66,7 +66,7 @@ class ServerConnection():
         def run(self):
             while self.serverconnection.connected:
                 try:
-                    readable, writable, ex = select([self.socket], [], [self.socket], timeout=1)
+                    readable, writable, ex = select([self.socket], [], [self.socket], 1)
                     if readable:
                         data = readable[0].recv(4096)
                         try:
@@ -75,6 +75,8 @@ class ServerConnection():
                             for line in lines:
                                 if line:
                                     msg = Message(self.server_name, *self.message_splitter.match(line).groups(""))
+                                    if msg.command == "PRIVMSG" and msg.params == self.serverconnection.nick:
+                                        msg.params = msg.nick
                                     self.in_queue.put(msg)
                         except Exception as e:
                             print("ERROR IN " + self.name + " INTHREAD, " + str(e))

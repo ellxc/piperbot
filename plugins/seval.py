@@ -7,22 +7,23 @@ import datetime
 import random
 from wrappers import *
 import pymongo
+import sys
 
 
-class AttrDict(dict):
+class AttrDict(defaultdict):
     def __init__(self, *args, **kwargs):
-        super(AttrDict, self).__init__(*args, **kwargs)
+        defaultdict.__init__(self, self.__class__)
 
     def __getattr__(self, name):
-        if name not in self:
+        if name not in self.__dict:
             if name.startswith("__"):
-                return dict.__getattribute__(self, name)
+                return self.__dict__[name]
             else:
-                self[name] = AttrDict()
-        return self[name]
+                self.__dict[name] = AttrDict()
+        return self.__dict[name]
 
     def __setattr__(self, key, value):
-        self[key] = value
+        self.__dict[key] = value
 
 
 class Namespace(dict):
@@ -33,8 +34,8 @@ class Namespace(dict):
     copied from http://code.activestate.com/recipes/577887-a-simple-namespace-class/
     """
 
-    def __init__(self, obj={}):
-        super().__init__(obj)
+    def __init__(self, obj=None):
+        super().__init__(obj if obj is not None else {})
 
     def __dir__(self):
         return tuple(self)
@@ -46,8 +47,13 @@ class Namespace(dict):
         try:
             return self[name]
         except KeyError:
-            msg = "'%s' object has no attribute '%s'"
-            raise AttributeError(msg % (type(self).__name__, name))
+            try:
+                return self.__getattr__(name)
+            except:
+                pass
+
+            self[name] = Namespace()
+            return self[name]
 
     def __setattr__(self, name, value):
         self[name] = value
@@ -262,6 +268,7 @@ class timedelta_(datetime.timedelta):
 
 
 globalenv = {
+    "maxint": sys.maxsize,
     'len': len,
     'hex': hex,
     'map': map,
@@ -300,8 +307,13 @@ def attrpath(node):
 def eval_(expr, msg):
     env = localenv.copy()
     env.update(globalenv)
-    env.update(userenv)
-    for stmt_or_expr in ast.parse(expr, mode='single').body:
+    print("asd")
+    asd = [(key, userenv[key]) for key in list(userenv)]
+    print("zxc")
+    #env.update(dict(userenv))
+    body = ast.parse(expr, mode='single').body
+    if len(body) > 10: raise Exception("too many lines!")
+    for stmt_or_expr in body:
         response = None
         if isinstance(stmt_or_expr, ast.Expr):
             #response = eval_expr(stmt_or_expr.value, env)
@@ -320,7 +332,7 @@ def eval_assign(node, env, msg):
     for x in node.targets:
         if isinstance(x, ast.Attribute):
             first, rest = attrpath(x)
-            if first == msg.nick:
+            if False: #first == msg.nick:
                 obj = userenv[first]
                 for attr in rest[:-1]:
                     obj = getattr(obj, attr)

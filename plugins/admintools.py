@@ -13,6 +13,12 @@ class AdminTools:
         x.text = None
         yield x
 
+    @command("notice",adminonly=True)
+    def notice(self,message):
+        temp = message.copy()
+        temp.command = "NOTICE"
+        yield temp
+
     @command("connect", adminonly=True)
     def connect(self, message):
         match = self.connect_regex.match(message.text)

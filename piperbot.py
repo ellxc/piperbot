@@ -9,10 +9,11 @@ import os
 import string
 import json
 import codecs
-from sys import argv
+from sys import argv, stdout
 from collections.abc import Iterable, Mapping
-
+import traceback
 from serverconnection import ServerConnection
+
 
 
 class User:
@@ -86,11 +87,11 @@ class PiperBot(threading.Thread):
 
     def shutdown(self):
         self.running = False
-        for server in self.servers.values():
-            server.disconnect(message="shutting down")
         for plugin in self.plugins.values():
             for func in plugin._onUnloads:
                 func()
+        for server in self.servers.values():
+            server.disconnect(message="shutting down")
 
     def load_plugin_from_module(self, plugin):
         if "." in plugin:
@@ -182,33 +183,34 @@ class PiperBot(threading.Thread):
                         groups = self.commands[command][1].get("groups", "")
                         funcs.append((self.commands[splits[0].split()[0]][0], groups))
                         initial = " ".join(splits[0].split()[1:])
-                for segment in splits[1:]:
-                    command = segment.split()[0]
-                    if command not in self.commands:
-                        valid = False
-                        self.send(message.reply("unrecognised command: " + command))
-                        break
-                    elif not self.commands[command][1].get("pipeable", True) and segment != splits[-1]:
-                        valid = False
-                        self.send(message.reply("unpipeable command: " + command))
-                        break
-                    elif self.commands[command][1].get("adminonly", False) and message.nick not in self.admins[
-                        message.server]:
-                        valid = False
-                        self.send(message.reply("admin only command: " + command))
-                        break
-                    else:
-                        groups = self.commands[command][1].get("groups", "")
-                        funcs.append((self.commands[command][0], groups))
-                    if len(segment.split()) > 1:
-                        args.append(" ".join(segment.split()[1:]) + " ")
-                    else:
-                        args.append(None)
-                args.append(None)
                 if valid:
-                    self.worker_pool.apply_async(
-                        lambda msg, funcs_, args_: self.handle_responses(self.pipe(msg, funcs_, args_),
-                                                                         initial=message),
+                    for segment in splits[1:]:
+                        command = segment.split()[0]
+                        if command not in self.commands:
+                            valid = False
+                            self.send(message.reply("unrecognised command: " + command))
+                            break
+                        elif not self.commands[command][1].get("pipeable", True) and segment != splits[-1]:
+                            valid = False
+                            self.send(message.reply("unpipeable command: " + command))
+                            break
+                        elif self.commands[command][1].get("adminonly", False) and message.nick not in self.admins[
+                            message.server]:
+                            valid = False
+                            self.send(message.reply("admin only command: " + command))
+                            break
+                        else:
+                            groups = self.commands[command][1].get("groups", "")
+                            funcs.append((self.commands[command][0], groups))
+                        if len(segment.split()) > 1:
+                            args.append(" ".join(segment.split()[1:]) + " ")
+                        else:
+                            args.append(None)
+                    args.append(None)
+                    if valid:
+                        self.worker_pool.apply_async(
+                            lambda msg, funcs_, args_: self.handle_responses(self.pipe(msg, funcs_, args_),
+                                                                             initial=message),
                         args=(temp.reply(initial), funcs, args))
 
             self.message_buffer[message.server][message.params].appendleft(message)
@@ -239,7 +241,9 @@ class PiperBot(threading.Thread):
                 line += "\n"
             self.servers[message.server].socket.send(line.encode())
             if message.command == "PRIVMSG":
-                self.message_buffer[message.server][message.params].appendleft(message)
+                temp = message.copy()
+                temp.nick = self.servers[message.server].nick
+                self.message_buffer[message.server][message.params].appendleft(temp)
         else:
             raise Exception("no such server: " + message.server)
 
@@ -258,8 +262,8 @@ class PiperBot(threading.Thread):
                     temp = x.copy()
                     if x.command == "PRIVMSG" or x.action:
                         no += 1
-                        if not pmd and no > 3:
-                            temp.params = initial.nick
+                        #if not pmd and no > 3:
+                        #    temp.params = temp.nick
                     if args[0] is not None:
                         formats = list(self.stringformatter.parse(args[0]))
 
@@ -299,8 +303,8 @@ class PiperBot(threading.Thread):
                         temp = x.copy()
                         if x.command == "PRIVMSG" or x.action:
                             no += 1
-                            if not pmd and no > 3:
-                                temp.params = initial.nick
+                            #if not pmd and no > 3:
+                            #    temp.params = temp.nick
                         if args[-1] is not None:
                             formats = list(self.stringformatter.parse(args[-1]))
                             if len(formats) > 1 or (formats and any(map(lambda x: x is not None, formats[0][1:]))):
@@ -334,7 +338,16 @@ class PiperBot(threading.Thread):
                         self.send(i)
                 else:
                     self.send(response)
+            except BrokenPipeError:
+                try:
+                    self.servers[i.server].reconnect()
+                except:
+                    try:
+                        self.servers[response.server].reconnect()
+                    except:
+                        raise
             except Exception as e:
+                traceback.print_exc(file=stdout)
                 if initial is not None:
                     self.send(initial.reply(type(e).__name__ + (": " + str(e)) if str(e) else ""))
                 print(e)
