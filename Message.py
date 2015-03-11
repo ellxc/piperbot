@@ -21,12 +21,13 @@ class Message():
         self._text = text
         self.timestamp = timestamp or datetime.datetime.now()
         self.groups = groups
-        self.data = data
+        self._data = data
+
 
     @property
     def text(self):
         if self._text is None:
-            if self.data is not None:
+            if self._data is not None:
                 return repr(self.data)
             else:
                 return ""
@@ -45,6 +46,17 @@ class Message():
         self._text = val
 
     @property
+    def data(self):
+        if self._data is None:
+            if self._text is not None:
+                return self._text
+        return self._data
+
+    @data.setter
+    def data(self, val):
+        self._data = val
+
+    @property
     def command(self):
         if self._command == "ACTION":
             return "PRIVMSG"
@@ -58,7 +70,8 @@ class Message():
     def to_line(self):
         text = self.text.replace("\r", "").replace("\n", "")
         return "%s %s :%s%s%s" % (
-        self.command, self.params, ("\001ACTION " if self.action else ""), text, ("\001" if self.action else ""))
+            self.command, self.params, ("\001ACTION " if self.action else ""), text[:200],
+            ("\001" if self.action else ""))
 
     def reply(self, text=None, data=None):
         return Message(server=self.server, nick=self.nick, command=self.command,

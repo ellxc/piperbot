@@ -6,11 +6,9 @@ from queue import PriorityQueue, Empty
 import inspect
 import importlib
 import os
-import string
 import json
 import codecs
 from sys import argv
-from collections.abc import Iterable, Mapping
 
 from serverconnection import ServerConnection
 
@@ -40,28 +38,35 @@ class PiperBot(threading.Thread):
         self.worker_pool = ThreadPool(processes=4)
 
         self.message_buffer = defaultdict(lambda: defaultdict(lambda: deque(maxlen=50)))
-        self.buffer_pattern = re.compile(r"(?:([a-z_\-\[\]^{}|`][a-z0-9_\-\[\]^{}|`]*)|\s)(?:\^(\d+)|(\^+))",
-                                         flags=re.IGNORECASE)
-        self.escaped_buffer_pattern = re.compile(r"\\\^")
-        self.repr_pattern = re.compile(r"(?:[A-Z]+\.)*([A-Z]+\(.*\))", flags=re.IGNORECASE)
-
-        self.stringformatter = string.Formatter()
+        self.buffer_pattern = re.compile(r"(?:(\w+)|(\s)|^)(?:\^(\d+)|(\^+))")
+        self.buffer_pattern_escape = re.compile(r"\\\^")
 
         self.running = False
 
-    def buffer_replace(self, buffer, match_object):
-        if match_object.group(1):
-            buffer = [x for x in list(buffer) if x.nick == match_object.group(1)]
-            if not buffer:
-                raise Exception("user not in memory")
-        if match_object.group(2):
-            count = int(match_object.group(2))
-        elif match_object.group(3):
-            count = len(match_object.group(3))
-        if count <= len(buffer):
-            return " " + buffer[count - 1].text
-        else:
-            raise Exception("line not in memory")
+
+    def buffer_replace(self, text, servername, channel, offset=0):
+
+        buffer = list(self.message_buffer[servername][channel])[offset:]
+
+        def buffer_sub(match_object):
+            if match_object.group(1):
+                messgages = [x for x in buffer if x.nick == match_object.group(1)]
+                if not messgages:
+                    raise Exception("user not in memory")
+            else:
+                messgages = buffer
+            if match_object.group(3):
+                count = int(match_object.group(3))
+            elif match_object.group(4):
+                count = len(match_object.group(4))
+            if count <= len(messgages):
+                return (" " if match_object.group(2) else "") + messgages[count - 1].text
+            else:
+                raise Exception("line not in memory")
+
+        text = self.buffer_pattern.sub(buffer_sub, text)
+        text = self.buffer_pattern_escape.sub("^", text)
+        return text
 
     def connect_to(self, servername, network, port, nick, channels=None, admins=None, password=None, username=None,
                    ircname=None, ssl=False):
@@ -86,11 +91,11 @@ class PiperBot(threading.Thread):
 
     def shutdown(self):
         self.running = False
-        for server in self.servers.values():
-            server.disconnect(message="shutting down")
         for plugin in self.plugins.values():
             for func in plugin._onUnloads:
                 func()
+        for server in self.servers.values():
+            server.disconnect(message="shutting down")
 
     def load_plugin_from_module(self, plugin):
         if "." in plugin:
@@ -138,6 +143,7 @@ class PiperBot(threading.Thread):
         for (func, args) in plugin_instance._commands:
             if args["command"] not in self.commands:
                 self.commands[args["command"]] = (func, args)
+                print("loaded command: ", args["command"])
             else:
                 print("command overlap! : " + args["command"])
         if plugin._plugin_thread:
@@ -158,58 +164,40 @@ class PiperBot(threading.Thread):
             self.send(response)
         elif message.command == "PRIVMSG":
             if message.text.startswith(self.command_char) and message.text[1:]:
-                temp = message.copy()
-                try:
-                    temp.text = self.buffer_pattern.sub(
-                        lambda x: self.buffer_replace(self.message_buffer[message.server][message.params], x),
-                        message.text[len(self.command_char):])
-                    temp.text = self.escaped_buffer_pattern.sub("^", temp.text)
-                except Exception as e:
-                    self.send(message.reply("error: " + str(e)))
+                print("command: ", message.text[1:])
 
-                splits = list(map(lambda x: x.strip(), temp.text.split(" || ")))
+                commands = map(lambda x: [(command, " ".join(args)) for command, *args in [x.split(" ")]][0],
+                               map(lambda x: x.strip(), message.text[1:].split(" || ")))
                 funcs = []
                 args = []
-                valid = False
-                if splits and splits[0].split()[0].strip() and splits[0].split()[0].strip() in self.commands:
-                    command = splits[0].split()[0].strip()
-                    if self.commands[command][1].get("adminonly", False) and message.nick not in self.admins[
-                        message.server]:
-                        valid = False
-                        self.send(message.reply("admin only command: " + command))
+                for func, arg in commands:
+                    if func in self.commands:
+                        if self.commands[func][1].get("adminonly", False) and message.nick not in self.admins[
+                            message.server]:
+                            self.send(message.reply("admin only command: " + func))
+                            break
+                        else:
+                            funcs.append(self.commands[func][0])
+                            if self.commands[func][1].get("bufferreplace", True):
+                                try:
+                                    arg = self.buffer_replace(arg, message.server, message.params)
+                                except Exception as e:
+                                    self.send(message.reply("error: " + str(e)))
+                                    break
+                            args.append(message.reply(text=arg))
                     else:
-                        valid = True
-                        groups = self.commands[command][1].get("groups", "")
-                        funcs.append((self.commands[splits[0].split()[0]][0], groups))
-                        initial = " ".join(splits[0].split()[1:])
-                for segment in splits[1:]:
-                    command = segment.split()[0]
-                    if command not in self.commands:
-                        valid = False
-                        self.send(message.reply("unrecognised command: " + command))
+                        self.send(message.reply("unrecognised command: " + func))
                         break
-                    elif not self.commands[command][1].get("pipeable", True) and segment != splits[-1]:
-                        valid = False
-                        self.send(message.reply("unpipeable command: " + command))
-                        break
-                    elif self.commands[command][1].get("adminonly", False) and message.nick not in self.admins[
-                        message.server]:
-                        valid = False
-                        self.send(message.reply("admin only command: " + command))
-                        break
-                    else:
-                        groups = self.commands[command][1].get("groups", "")
-                        funcs.append((self.commands[command][0], groups))
-                    if len(segment.split()) > 1:
-                        args.append(" ".join(segment.split()[1:]) + " ")
-                    else:
-                        args.append(None)
-                args.append(None)
-                if valid:
-                    self.worker_pool.apply_async(
-                        lambda msg, funcs_, args_: self.handle_responses(self.pipe(msg, funcs_, args_),
-                                                                         initial=message),
-                        args=(temp.reply(initial), funcs, args))
+                else:
+                    print("commands: ", " ".join(map(str, funcs)))
+                    print("args: ", " ".join(map(str, args)))
+
+
+                    def onError(e):
+                        self.send(message.reply(type(e).__name__ + (": " + str(e)) if str(e) else ""))
+
+
+                    self.worker_pool.apply_async(self.pipe, args=(funcs, args), error_callback=onError)
 
             self.message_buffer[message.server][message.params].appendleft(message)
 
@@ -228,8 +216,13 @@ class PiperBot(threading.Thread):
             for event, efunc in plugin._handlers:
                 if message.command.lower() == event.lower():
                     triggered.append((efunc, message))
-        self.worker_pool.map_async(lambda fnc_msg: self.handle_responses(fnc_msg[0](fnc_msg[1])), triggered,
-                                   error_callback=print)
+        self.worker_pool.starmap_async(self.call_trigger, triggered, error_callback=print)
+
+
+    def call_trigger(self, func, message):
+        res = self.resulter()
+        next(res)
+        func(message, res)
 
     def send(self, message):
         if message.server in self.servers:
@@ -239,105 +232,32 @@ class PiperBot(threading.Thread):
                 line += "\n"
             self.servers[message.server].socket.send(line.encode())
             if message.command == "PRIVMSG":
-                self.message_buffer[message.server][message.params].appendleft(message)
+                temp = message.copy()
+                temp.nick = self.servers[message.server].nick
+                self.message_buffer[message.server][message.params].appendleft(temp)
         else:
             raise Exception("no such server: " + message.server)
 
-    def pipe(self, initial, funcs, args, pmd=False):
-        if len(funcs) == 1:
-            no = 0
-            if funcs[0][1]:
-                initial = initial.copy()
-                match = re.match(funcs[0][1], initial.text)
-                if not match:
-                    raise Exception("invalid syntax")
-                initial.groups = match.groups()
-            z = funcs[0][0](initial)
-            if z:
-                for x in z:
-                    temp = x.copy()
-                    if x.command == "PRIVMSG" or x.action:
-                        no += 1
-                        if not pmd and no > 3:
-                            temp.params = initial.nick
-                    if args[0] is not None:
-                        formats = list(self.stringformatter.parse(args[0]))
+    def pipe(self, funcs, args):
 
-                        if len(formats) > 1 or (formats and any(map(lambda x: x is not None, formats[0][1:]))):
-                            if temp.data is not None:
-                                repr_ = self.repr_pattern.match(repr(temp.data))
-                                if repr_:
-                                    arg = [repr_.group(1)] * len(formats)
-                                    temp.text = args[0].format(*arg)
-                                else:
-                                    # if isinstance(temp.data, Mapping):
-                                    #     temp.text = args[0].format(**temp.data)
-                                    # elif isinstance(temp.data, Iterable) and not isinstance(temp.data, str):
-                                    #     temp.text = args[0].format(*temp.data)
-                                    # else:
-                                        temp.text = args[0].format(*([temp.data] * len(formats)))
-                            else:
-                                arg = [temp.text] * len(formats)
-                                temp.text = args[0].format(*arg)
-                        elif temp.data is None:
-                            temp.text = args[0] + temp.text
-                        else:
-                            temp.text = args[0]
-                    yield temp
-        else:
-            no = 0
-            z = self.pipe(initial, funcs[:-1], args[:-1], pmd)
-            if z:
-                for y in z:
-                    if funcs[-1][1]:
-                        y = y.copy()
-                        match = re.match(funcs[-1][1], y.text)
-                        if not match:
-                            raise Exception("invalid syntax")
-                        y.groups = match.groups()
-                    for x in funcs[-1][0](y):
-                        temp = x.copy()
-                        if x.command == "PRIVMSG" or x.action:
-                            no += 1
-                            if not pmd and no > 3:
-                                temp.params = initial.nick
-                        if args[-1] is not None:
-                            formats = list(self.stringformatter.parse(args[-1]))
-                            if len(formats) > 1 or (formats and any(map(lambda x: x is not None, formats[0][1:]))):
-                                if temp.data is not None:
-                                    repr_ = self.repr_pattern.match(repr(temp.data))
-                                    if repr_:
-                                        arg = [repr_.group(1)] * len(formats)
-                                        temp.text = args[-1].format(*arg)
-                                    else:
-                                        if isinstance(temp.data, Mapping):
-                                            temp.text = args[-1].format(**temp.data)
-                                        elif isinstance(temp.data, Iterable) and not isinstance(temp.data, str):
-                                            temp.text = args[-1].format(*temp.data)
-                                        else:
-                                            temp.text = args[-1].format(*([repr(temp.data)] * len(formats)))
-                                else:
-                                    arg = [temp.text] * len(formats)
-                                    temp.text = args[-1].format(*arg)
-                            elif not temp.data:
-                                temp.text = args[-1] + temp.text
-                            else:
-                                temp.text = args[-1]
+        res = self.resulter()
+        next(res)
 
-                        yield temp
+        piped = res
+        for func, args in zip(funcs[::-1], args[::-1]):
+            piped = func(args, piped)
 
-    def handle_responses(self, response, initial=None):
-        if response:
-            try:
-                if inspect.isgenerator(response):
-                    for i in response:
-                        self.send(i)
-                else:
-                    self.send(response)
-            except Exception as e:
-                if initial is not None:
-                    self.send(initial.reply(type(e).__name__ + (": " + str(e)) if str(e) else ""))
-                print(e)
+        piped.send(None)
+        piped.close()
+
+    def resulter(self):
+        try:
+            while 1:
+                x = yield
+                print("resulter: ", x)
+                self.send(x)
+        except GeneratorExit:
+            pass  # pipe closed
 
 
 if __name__ == "__main__":

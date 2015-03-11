@@ -1,10 +1,8 @@
 import codecs
+import urllib.request
+import urllib.parse
 
 from wrappers import *
-
-
-def lup():
-    while 1: pass
 
 
 @plugin(desc="general")
@@ -16,97 +14,55 @@ class general():
     def pm(self, messsage):
         x = messsage.copy()
         x.params = messsage.nick
-        yield x
+        return x
 
 
-    @command("iterate", adminonly=True)
+    @command("iterate", adminonly=True, simple=True)
     def iter(self, message):
         for x in self.itersplit.finditer(message.text):
             yield message.reply(x.group(0))
 
-    @command("r")
     @command("reverse")
     def reverse(self, message):
-        yield message.reply(message.text[::-1])
+        return message.reply(message.text[::-1])
 
     @command("echo")
     def echo(self, message):
-        yield message.reply(message.text)
+        return message.reply(message.text, data=message.data)
 
     @command("caps")
     @command("upper")
     def uper(self, message):
-        yield message.reply(message.text.upper())
+        return message.reply(message.text.upper())
 
     @command("lower")
     def lower(self, message):
-        yield message.reply(message.text.lower())
+        return message.reply(message.text.lower())
 
     @command("rot13")
     def rot13(self, message):
-        yield message.reply(codecs.encode(message.text, 'rot_13'))
+        return message.reply(codecs.encode(message.text, 'rot_13'))
 
-    @command("title")
     @command("camel")
     def camel(self, message):
-        yield message.reply(message.text.title())
-
-    @command("b")
-    @command("bin")
-    @command("binary")
-    def binary(self, message):
-        try:
-            number = int(message.text)
-            yield message.reply("{0:b}".format(number))
-        except Exception as e:
-            raise Exception("failed to parse: " + str(e))
-
-    @command("-b")
-    @command("-bin")
-    @command("-binary")
-    def reversebinary(self, message):
-        try:
-            number = int(message.text, 2)
-            yield message.reply(str(number))
-        except Exception as e:
-            raise Exception("failed to parse: " + str(e))
-
-    @command("h")
-    @command("hex")
-    def hex(self, message):
-        response = message.get_reply()
-        try:
-            number = int(message.text)
-            yield message.reply("{0:x}".format(number))
-        except Exception as e:
-            raise Exception("failed to parse: " + str(e))
-
-    @command("-h")
-    @command("-hex")
-    def reversehex(self, message):
-        try:
-            number = int(message.text, 16)
-            text = str(number)
-            yield message.reply(text)
-        except Exception as e:
-            raise Exception("failed to parse: " + str(e))
+        return message.reply(message.text.title())
 
     @command("list")
     def list(self, message):
-        yield message.reply("loaded plugins : " + ", ".join(self.bot.plugins.keys()))
+        return message.reply("loaded plugins : " + ", ".join(self.bot.plugins.keys()))
 
     @command("tr")
     def tr(self, message):
-        yield message.reply()
+        return message.reply()
 
     @command("help")
     def help(self, message):
         """help <command>   -> returns the help for the specified command
-            derp derp derp
+           derp derp derp
 
         """
         if message.data is not None and message._text is None:
-            yield message.reply(
+            return message.reply(
                 text="not yet implemented pydoc look up. this is a %s" % message.data.__class__.__name__)
         else:
             try:
@@ -116,33 +72,106 @@ class general():
                 raise Exception("specifed command not found")
             doc = func.__doc__
             if not doc:
-                yield message.reply("No help found for specified command")
+                return message.reply("No help found for specified command")
             else:
-                yield message.reply(doc.split("\r\n")[0])
+                return message.reply(doc.split("\n")[0])
 
     @command
     def strip(self, message):
-        yield message.reply(message.text.strip())
+        return message.reply(message.text.strip())
 
     @command
     def blank(self, message):
-        yield message.reply("", data=message.data)
+        return message.reply("", data=message.data)
 
+    @command
+    def sprunge(self, arg, target):
+        lines = []
+        arg = arg
+        try:
+            while 1:
+                x = yield
+                if x is None:
+                    lines.append(str(arg.text))
+                else:
+                    lines.append(str(x.text))
+        except GeneratorExit:
+            data = {'sprunge': '\n'.join(lines)}
+            response = urllib.request.urlopen(urllib.request.Request('http://sprunge.us',
+                                                                     urllib.parse.urlencode(data).encode(
+                                                                         'utf-8'))).read().decode()
+            print(response)
+            target.send(arg.reply(text=response))
+            target.close()
 
-    @regex(r"^s([:/%|\!@,])((?:(?!\1)[^\\]|\\.)*)\1((?:(?!\1)[^\\]|\\.)*)\1([gi\d]*)")
-    @command("sed")
-    def sed(self, message):
-        text = None
-        if message.groups:
-            print(message.groups)
-            delim, find, sub, flags = message.groups
+    @command
+    def collect(self, arg, target):
+        lines = []
+        arg = arg
+        try:
+            while 1:
+                x = yield
+                if x is None:
+                    lines.append(str(arg.text))
+                else:
+                    lines.append(str(x.text))
+        except GeneratorExit:
+            target.send(arg.reply(text='; '.join(lines)))
+            target.close()
+
+    @regex(r"^s([:/%|\!@,])((?:(?!\1)[^\\]|\\.)*)\1((?:(?!\1)[^\\]|\\.)*)\1([gi\d]*)(?: +(.+))")
+    def sedr(self, message):
+        print(message.groups)
+        delim, find, sub, flags, text = message.groups
+
+        sub = re.sub(r"\\" + delim, delim, sub)
+        action = False
+        kwargs = {"count": 1}
+        if "i" in flags:
+            kwargs["flags"] = re.IGNORECASE
+        if text is None:
+            for msg in list(self.bot.message_buffer[message.server][message.params])[1:]:
+                matchobj = timed(lambda:
+                                 bool(re.search(find, msg.text,
+                                                **({"flags": re.IGNORECASE} if "i" in flags else {}))))
+                if matchobj:
+                    text = msg.text
+                    if msg.action:
+                        action = True
+                    break
+            if not text:
+                raise Exception("No text and no matching message found")
         else:
-            match = self.sedcommand.search(message.text)
-            if match:
-                delim, find, sub, flags, text = match.groups()
+            text = self.bot.buffer_replace(text, message.server, message.params, offset=1)
 
-        if message.groups or match:
-            sub = re.sub(r"\\/", "/", sub, count=0)
+        if not sub:
+            sub = ""
+        index = re.search(r".*?(\d+)", flags)
+        if "g" not in flags and index is not None:
+            index = int(index.group(1))
+            text = timed(lambda: [text[:x.start()] + x.expand(sub) + text[x.end():] for x in [[x for x, y in zip(
+                re.finditer(find, text, **({"flags": re.IGNORECASE} if "i" in flags else {})), range(index))][-1]]][
+                0])  # erm ... basically get the nth matchobject and do stuff
+            result = message.reply(text)
+            # result = message.reply(timed(re.sub, args=(find, replaceNthWith(index, sub), text)))    # more readable but also less efficient!
+        else:
+            if "g" in flags:
+                kwargs["count"] = 0
+            result = message.reply(timed(re.sub, args=(find, sub, text), kwargs=kwargs))
+
+        if action:
+            result.action = True
+        return result
+
+
+    @command("sed")
+    def sedc(self, message):
+        text = None
+
+        match = self.sedcommand.search(message.text)
+        if match:
+            delim, find, sub, flags, text = match.groups()
+            sub = re.sub(r"\\" + delim, delim, sub)
             action = False
             kwargs = {"count": 1}
             if "i" in flags:
@@ -174,7 +203,7 @@ class general():
 
             if action:
                 result.action = True
-            yield result
+            return result
 
         else:
             raise Exception("invalid pattern")

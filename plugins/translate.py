@@ -1,6 +1,10 @@
-import urllib.request, urllib.error, urllib.parse
+import urllib.request
+import urllib.error
+import urllib.parse
 import json
+
 from wrappers import *
+
 
 @plugin(desc="google translator")
 class Google():
@@ -25,11 +29,11 @@ class Google():
     
     @command("tp")
     def plain_translate(self, message):
-        yield message.reply(self.parse_and_translate(message.text, verbose=False))
+        return message.reply(self.parse_and_translate(message.text, verbose=False))
 
     @command("t")
     def translate(self, message):
-        yield message.reply(self.parse_and_translate(message.text))
+        return message.reply(self.parse_and_translate(message.text))
 
     def parse_and_translate(self, text, verbose=True):
         match = self.param.match(text.lower())

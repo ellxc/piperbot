@@ -1,10 +1,12 @@
-from wrappers import *
-from plugins.stuff.countdownsolver import solve, solve_best
-from Message import Message
-from collections import namedtuple, defaultdict, Counter, ChainMap
+from collections import namedtuple, defaultdict, Counter
 from random import randint, sample
 import ast
 import operator as op
+
+from wrappers import *
+from plugins.stuff.countdownsolver import solve, solve_best
+
+
 
 # supported operators
 operators = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul,
@@ -43,6 +45,7 @@ class countdown:
         self.big = [25, 50, 75, 100]
         self.small = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10]
 
+
     @command("cd")
     @command("solve")
     @command("countdown")
@@ -52,9 +55,9 @@ class countdown:
             raise Exception("too many numbers")
         expr, value = solve(target, numbers)
         if value == target:
-            yield message.reply("Solution: " + expr + " = " + str(target))
+            return message.reply("Solution: " + expr + " = " + str(target))
         else:
-            yield message.reply("closest: " + expr + " = " + str(value))
+            return message.reply("closest: " + expr + " = " + str(value))
 
 
     @command("cdb")
@@ -64,9 +67,9 @@ class countdown:
         target, *numbers = [int(x) for x in message.text.split()]
         expr, value = solve_best(target, numbers)
         if value == target:
-            yield message.reply("Best solution: " + expr + " = " + str(target))
+            return message.reply("Best solution: " + expr + " = " + str(target))
         else:
-            yield message.reply("closest: " + expr + " = " + str(value))
+            return message.reply("closest: " + expr + " = " + str(value))
 
     @command("cdn")
     @command("cdnewgame")
@@ -77,29 +80,28 @@ class countdown:
             user = message.nick
             game = Game(target, numbers, None, None, user, message.timestamp)
             self.games[message.params] = game
-            yield message.reply('Target is ' + str(target) + ' and the numbers are: ' +
+            return message.reply('Target is ' + str(target) + ' and the numbers are: ' +
                                 ", ".join([str(x) for x in numbers]))
         else:
-            yield message.reply('Game in progress, target is ' +
+            return message.reply('Game in progress, target is ' +
                                 str(self.games[message.params].target) + ' and the numbers are: ' +
                                 ", ".join([str(x) for x in self.games[message.params].numbers]))
 
 
-    @command("cdg")
-    @command("cdgiveup")
+    @command("cdg", simple=True)
+    @command("cdgiveup", simple=True)
     def giveup(self, message):
         if self.games[message.params]:
-            yield message.reply("attempting to solve...")
             target = self.games[message.params].target
             numbers = self.games[message.params].numbers
             expr, value = solve(target, numbers)
-            if value == target:
-                yield message.reply("Solution: " + expr + " = " + str(target))
-            else:
-                yield message.reply("closest: " + expr + " = " + str(value))
             del self.games[message.params]
+            if value == target:
+                return message.reply("Solution: " + expr + " = " + str(target))
+            else:
+                return message.reply("closest: " + expr + " = " + str(value))
         else:
-            yield message.reply("no game running")
+            return message.reply("no game running")
 
     @command("cda")
     @command("cdanswer")
@@ -109,14 +111,14 @@ class countdown:
             numberset = Counter(self.games[message.params].numbers)
             if not numbersused - numberset:
                 if int(eval_expr(message.text.strip())) == self.games[message.params].target:
-                    yield message.reply("Correct! ten points to " + message.nick + "dor (in theory...)")
                     del self.games[message.params]
+                    return message.reply("Correct! ten points to " + message.nick + "dor (in theory...)")
                 elif abs(eval_expr(message.text.strip()) - self.games[message.params].target) < 10:
                     no = abs(eval_expr(message.text.strip()) - self.games[message.params].target)
-                    yield message.reply(
+                    return message.reply(
                         str(no) + " away! " + str(10 - no) + " points to " + message.nick + "dor (in theory...)")
                 else:
-                    yield message.reply("Incorrect! your answer equals " + str(eval_expr(message.text.strip())))
+                    return message.reply("Incorrect! your answer equals " + str(eval_expr(message.text.strip())))
             else:
                 raise Exception("incorrect numbers used")
         else:

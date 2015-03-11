@@ -1,6 +1,9 @@
-from wrappers import *
-import urllib.request, urllib.error
+import urllib.request
+import urllib.error
 import html
+
+from wrappers import *
+
 
 @plugin
 class linker:
@@ -11,7 +14,7 @@ class linker:
         if not message.text.startswith("Title:"):
             return message.reply("http://reddit.com/r/" + message.groups)
 
-    @regex(r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+")
+    @regex(r"^.*(http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)")
     def url(self, message):
         try:
             local_filename, headers = urllib.request.urlretrieve(message.groups)
@@ -28,14 +31,14 @@ class linker:
 
                 title= html.unescape(everything_between(url,'<title>','</title>')[:200])
 
-                yield message.reply("Title: %s" % title)
+                return message.reply("Title: %s" % title)
             else:
-                yield message.reply("[%s%s]" % (contenttype, ("; encoding=" + encoding) if encoding else ""))
+                return message.reply("[%s%s]" % (contenttype, ("; encoding=" + encoding) if encoding else ""))
 
         except urllib.error.HTTPError as e:
             pass
         except Exception as e:
             print(e)
-            yield message.reply("Title: pron")
+            return message.reply("Title: pron")
         finally:
             urllib.request.urlcleanup()
