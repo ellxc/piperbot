@@ -24,6 +24,7 @@ class Message():
         self._data = data
 
 
+
     @property
     def text(self):
         if self._text is None:

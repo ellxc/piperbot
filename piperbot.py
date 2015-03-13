@@ -9,8 +9,8 @@ import os
 import json
 import codecs
 from sys import argv
-
 from serverconnection import ServerConnection
+
 
 
 class User:
@@ -217,7 +217,6 @@ class PiperBot(threading.Thread):
                 if message.command.lower() == event.lower():
                     triggered.append((efunc, message))
         self.worker_pool.starmap_async(self.call_trigger, triggered, error_callback=print)
-
 
     def call_trigger(self, func, message):
         res = self.resulter()
