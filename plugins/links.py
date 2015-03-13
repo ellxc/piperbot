@@ -1,6 +1,9 @@
-from wrappers import *
-import urllib.request, urllib.error
+import urllib.request
+import urllib.error
 import html
+
+from wrappers import *
+
 
 @plugin
 class linker:
@@ -28,14 +31,14 @@ class linker:
 
                 title= html.unescape(everything_between(url,'<title>','</title>')[:200])
 
-                yield message.reply("Title: %s" % title)
+                return message.reply("Title: %s" % title)
             else:
-                yield message.reply("[%s%s]" % (contenttype, ("; encoding=" + encoding) if encoding else ""))
+                return message.reply("[%s%s]" % (contenttype, ("; encoding=" + encoding) if encoding else ""))
 
         except urllib.error.HTTPError as e:
             pass
         except Exception as e:
             print(e)
-            yield message.reply("Title: pron")
+            return message.reply("Title: pron")
         finally:
             urllib.request.urlcleanup()

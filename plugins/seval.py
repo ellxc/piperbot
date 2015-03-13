@@ -543,15 +543,28 @@ class Eval:
             for key, val in space.items():
                 db[user].insert({"key": key, "bin": pickle.dumps(val)})
 
-    @command("calc")
-    @command(">")
-    def calc(self, message):
-        if message.data:
-            globalenv["data"] = message.data
-        for response in eval_(message.text.strip(), message):
-            yield message.reply(data=response)
-        globalenv["data"] = None
+    @command(">", bufferreplace=False)
+    def calc(self, arg, target):
+
+        try:
+            while 1:
+                message = yield
+                if message is None:
+                    globalenv["message"] = arg
+                    for response in eval_(arg.text.strip(), arg):
+                        target.send(arg.reply(data=response))
+                    globalenv["message"] = None
+                else:
+                    globalenv["message"] = message
+                    for response in eval_(arg.text.strip(), arg):
+                        target.send(arg.reply(data=response))
+                    globalenv["message"] = None
+
+        except GeneratorExit:
+            target.close()
+
+
 
     @command("liteval")
     def liteval(self, message):
-        yield message.reply(repr(ast.literal_eval(message.text.strip())))
+        return message.reply(repr(ast.literal_eval(message.text.strip())))

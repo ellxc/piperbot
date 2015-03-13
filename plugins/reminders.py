@@ -8,7 +8,6 @@ import pymongo
 import dill
 
 
-
 @plugin(thread=True)
 class Reminders(Thread):
     def __init__(self):
@@ -42,7 +41,7 @@ class Reminders(Thread):
         else:
             date = datetime.datetime.now()
         #date = datetime_(date.year,date.month,date.day,date.hour,date.minute,date.second,date.microsecond,date.tzinfo)
-        yield message.reply(text=str(date),data=date)
+        return message.reply(text=str(date), data=date)
 
     @command
     def reminders(self, message):
@@ -50,30 +49,59 @@ class Reminders(Thread):
         for reminder_ in self.reminders:
             if message.nick == reminder_.set_for:
                 reminders.append(reminder_)
+        text = "you have %s reminders! %s"
+        count = len(reminders)
+        if count < 3 or message.params[0] is not "#":
+            text3 = " and ".join([", ".join(reminders[:1])] or [] + [reminders[0:1]])
+            text2 = " they are: %".format(text3)
+        else:
+            text2 = "you have too many to post here, private message me for the list"
 
+        text = text.format(count, text2)
+        return message.reply(text=text)
 
-    @command(pipable=False)
+    @command
     def remind(self, message):
         if message.data:
             if isinstance(message.data, datetime.datetime):
                 self.reminders.append(reminder(message.nick, message.nick, datetime.datetime.today(),
                                                message.data, message._text or "", message.params,
                                                message.server))
-                yield message.reply("reminder set for %s!" % str(message.data))
+                self.reminders.sort()
+                self.event.set()
+                return message.reply("reminder set for %s!" % str(message.data))
             elif isinstance(message.data, datetime.timedelta):
                 self.reminders.append(reminder(message.nick, message.nick, datetime.datetime.today(),
                                                datetime.datetime.today() + message.data, message._text or "", message.params,
                                                message.server))
-                yield message.reply("reminder set to go in %s!" % str(message.data))
+                self.reminders.sort()
+                self.event.set()
+                return message.reply("reminder set to go in %s!" % str(message.data))
             else:
                 raise TypeError("expected a datetime or timedelta object")
         else:
-            self.reminders.append(reminder(message.nick, message.nick, datetime.datetime.today(),
-                                           datetime.datetime.today() + datetime.timedelta(0, 10), "", message.params,
-                                           message.server))
-            yield message.reply("reminder set!")
-        self.reminders.sort()
-        self.event.set()
+            if message.text.startswith("in"):
+                return message.reply(text="not implemented yet...")
+            elif message.text.startswith("at"):
+                date, *msg = message.text[3:].split("to")
+                date = parser.parse(date)
+                msg = "to".join(msg)
+                self.reminders.append(reminder(message.nick, message.nick, datetime.datetime.today(),
+                                               date, msg or "", message.params,
+                                               message.server))
+                self.reminders.sort()
+                self.event.set()
+                return message.reply("reminder set for %s!" % str(message.data))
+            else:
+
+
+                self.reminders.append(reminder(message.nick, message.nick, datetime.datetime.today(),
+                                               datetime.datetime.today() + datetime.timedelta(0, 10), "",
+                                               message.params,
+                                               message.server))
+                self.reminders.sort()
+                self.event.set()
+                return message.reply("10 second reminder set!")
 
     def run(self):
         self.ticking = True

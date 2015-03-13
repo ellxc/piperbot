@@ -1,8 +1,10 @@
+import random
+from collections import deque
+
 from wrappers import *
 import pymongo
 from bson.code import Code
-import random
-from collections import deque
+
 
 class mongomarkov():
     def __init__(self,dbname="markov"):
@@ -79,26 +81,24 @@ class markov:
         elif  message.text.startswith("to ") and len(message.text.split()) > 1:
             nick = message.text.split()[1]
             line = self.chain.make_line_from(nick + ":")
-        
         else:
             line = self.chain.make_line()
-        yield message.reply(line)
+        return message.reply(line)
         
         
     @command("clear", adminonly=True)
     def clear(self, message):
         self.chain.links.remove({})
-        return []
         
     @trigger(lambda message, bot: message.command == "PRIVMSG" and bot.servers[message.server].nick in message.text and message.nick not in ["CirnoX"] and message.text[0] not in "!#%$.")
     def mention(self, message):
         if message.text.startswith(self.bot.servers[message.server].nick+":"):
             try:
-                yield message.reply(self.chain.make_line_from(message.nick+":"))
+                return message.reply(self.chain.make_line_from(message.nick + ":"))
             except:
-                yield message.reply(self.chain.make_line())
+                return message.reply(self.chain.make_line())
         else:
-            yield message.reply(self.chain.make_line())
+            return message.reply(self.chain.make_line())
 
     @event("PRIVMSG")
     def add(self, message):

@@ -1,12 +1,23 @@
 ﻿{
-  "plugins" : ["general", "admintools", "maths", "seval", "markov", "translate"],
+  "plugins": [
+    "serverutils",
+    "general",
+    "admintools",
+    "seval",
+    "karma",
+    "markov",
+    "maths",
+    "reminders",
+    "translate",
+    "users"
+  ],
     "servers" : [
     {
         "IRCNet"  : "Holmes",
-		"IRCUser" : "piperbot",
-		"IRCName" : "piperbot",
+      "IRCUser": "Marvin64",
+      "IRCName": "Marvin",
 		"IRCHost" : "holmes.freenode.net",
-		"IRCNick" : "piperbot",
+      "IRCNick": "DevMarvin",
 		"IRCPort" : 6666,
 		"UseSSL"  : false,
 

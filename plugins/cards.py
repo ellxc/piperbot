@@ -1,10 +1,10 @@
 from random import shuffle
 from itertools import cycle
 from collections import defaultdict
+import time
 
 from wrappers import *
 from Message import Message
-import time
 
 
 def chunk_by_key(iterable, keyfunc):
@@ -89,9 +89,9 @@ class Cheat:
                 response = "Player {} has placed {} {} {}".format(message.nick, len(player), val,
                                                               "\3{0[0]},{0[1]}{1}{2}\3 ".format(backcolour, backstr * 2,
                                                                                                 backstr) * min(len(player),5))
-            yield Message(text=response, params=channel, command="PRIVMSG", server=message.server)
+            return Message(text=response, params=channel, command="PRIVMSG", server=message.server)
         else:
-            yield Message(params=message.nick, command="PRIVMSG", server=message.server,
+            return Message(params=message.nick, command="PRIVMSG", server=message.server,
                           text="Game: {}: it is not your turn, it is currently {}'s turn".format(channel,
                                                                                                  game.currentplayer))
 
@@ -113,10 +113,7 @@ class Cheat:
                 self.playersingames[message.server][message.nick].add(message.params)
                 text = 'joining game for this channel, use command {}ready when you would like to begin. There are currently {} players.'.format(self.bot.command_char, len(self.games[message.server][message.params].players))
 
-            if message.text == "ready":
-                yield from self.ready(message.reply(message.params))
-            else:
-                yield message.reply(text)
+            return message.reply(text)
 
 
     @command

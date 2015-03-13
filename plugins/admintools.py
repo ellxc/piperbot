@@ -9,32 +9,18 @@ class AdminTools:
     @command(groups="^(\S+)$", adminonly=True)
     def nick(self, message):
         x = message.copy()
-        x.nick = message.groups[0]
+        x.nick = message.text.split()[0]
         x.text = None
-        yield x
+        return x
 
     @command("notice",adminonly=True)
     def notice(self,message):
         temp = message.copy()
         temp.command = "NOTICE"
-        yield temp
+        return temp
 
-    @command("connect", adminonly=True)
-    def connect(self, message):
-        match = self.connect_regex.match(message.text)
-        if match:
-            try:
-                name, network, port, channels = match.groups()
-                self.bot.connect_to(name if name else network, network, int(port),
-                                    self.bot.servers[message.server].nick, channels.split() if channels else None)
-                response.text = "connecting to {}!".format(name if name else network)
-                yield response
-            except Exception as e:
-                yield message.reply(str(e))
-        else:
-            yield message.reply("malformed command!")
 
-    @command("join", adminonly=True)
+    @command("join", adminonly=True, simple=True)
     def join(self, message):
         response = message.reply("")
         response.command = "JOIN"
@@ -68,9 +54,9 @@ class AdminTools:
             for plugin in message.text.split():
                 try:
                     self.bot.load_plugin_from_module(plugin)
-                    yield message.reply("Loaded plugin(s) " + plugin)
+                    return message.reply("Loaded plugin(s) " + plugin)
                 except Exception as e:
-                    yield message.reply("error: " + str(e))
+                    return message.reply("error: " + str(e))
 
     @command("unload", adminonly=True)
     def unload(self, message):
@@ -78,9 +64,9 @@ class AdminTools:
             for plugin in message.text.split():
                 try:
                     self.bot.unload_module(plugin)
-                    yield message.reply("Unloaded plugin(s) " + plugin)
+                    return message.reply("Unloaded plugin(s) " + plugin)
                 except Exception as e:
-                    yield message.reply("error: " + str(e))
+                    return message.reply("error: " + str(e))
 
     @command("reload", adminonly=True)
     def reload(self, message):
@@ -89,21 +75,21 @@ class AdminTools:
                 try:
                     self.bot.unload_module(plugin)
                     self.bot.load_plugin_from_module(plugin)
-                    yield message.reply("reloaded plugin(s) " + plugin)
+                    return message.reply("reloaded plugin(s) " + plugin)
                 except Exception as e:
-                    yield message.reply("error: " + str(e))
+                    return message.reply("error: " + str(e))
 
     @command("eval", adminonly=True)
     def eval(self, message):
         try:
             result = eval(message.text)
-            yield message.reply(str(result),result)
+            return message.reply(str(result), result)
         except Exception as e:
-            yield message.reply(str(type(e)) + ": " + str(e))
+            return message.reply(str(type(e)) + ": " + str(e))
 
     @command("exec", adminonly=True)
     def execer(self, message):
         try:
             exec(message.text)
         except Exception as e:
-            yield message.reply(str(e))
+            return message.reply(str(e))

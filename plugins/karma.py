@@ -1,6 +1,8 @@
+from collections import Counter
+
 from wrappers import *
 import pymongo
-from collections import Counter
+
 
 @plugin
 class Karma:
@@ -34,10 +36,10 @@ class Karma:
                 if key not in checked:
                     checked.add(key)
                     score = self.karma[key.lower()]
-                    yield message.reply("{} has {} karma!".format(key, score or "no"), score)
+                    return message.reply("{} has {} karma!".format(key, score or "no"), score)
         else:
             key = message.nick
             score = self.karma[key.lower()]
-            yield message.reply("you have {} karma!".format(score or "no"), score)
+            return message.reply("you have {} karma!".format(score or "no"), score)
 
 
