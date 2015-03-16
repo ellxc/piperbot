@@ -7,62 +7,71 @@ from wrappers import *
 
 @plugin(desc="general")
 class general():
-    sedcommand = re.compile(r"s([:/%|\!@,])((?:(?!\1)[^\\]|\\.)*)\1((?:(?!\1)[^\\]|\\.)*)\1?([gi\d]*) ?(.*)")
     itersplit = re.compile(r'(?:"[^"]*"|[^ ]+)')
 
     @command  # (groups="^(\S+)?$")
-    def pm(self, messsage):
-        x = messsage.copy()
-        x.params = messsage.nick
-        return x
+    def pm(self, arg, target):
+        """redirects the output to a private message"""
+        try:
+            while 1:
+                x = yield
+                if x is not None:
+                    x = x.copy()
+                    x.params = arg.nick
+                    target.send(x)
+        except GeneratorExit:
+            target.close()
 
 
-    @command("iterate", adminonly=True, simple=True)
+    @command("iterate", simple=True)
     def iter(self, message):
         for x in self.itersplit.finditer(message.text):
             yield message.reply(x.group(0))
 
     @command("reverse")
     def reverse(self, message):
+        "reverse the message's text"
         return message.reply(message.text[::-1])
 
     @command("echo")
     def echo(self, message):
+        "repeats the input, useful for formatting"
         return message.reply(message.text, data=message.data)
 
     @command("caps")
     @command("upper")
     def uper(self, message):
+        "turns the message into upper case"
         return message.reply(message.text.upper())
 
     @command("lower")
     def lower(self, message):
+        "turns the message into lower case"
         return message.reply(message.text.lower())
 
     @command("rot13")
     def rot13(self, message):
+        "applies rot13 to the message"
         return message.reply(codecs.encode(message.text, 'rot_13'))
 
     @command("camel")
     def camel(self, message):
+        "turns the message into camel case"
         return message.reply(message.text.title())
 
     @command("list")
     def list(self, message):
+        "list the loaded plugins"
         return message.reply("loaded plugins : " + ", ".join(self.bot.plugins.keys()))
 
-    @command("tr")
-    def tr(self, message):
-        return message.reply()
-
-    @command("help")
+    @command("help", simple=True)
     def help(self, message):
         """help <command>   -> returns the help for the specified command
            derp derp derp
 
         """
         if message.data is not None and message._text is None:
-            return message.reply(
+            yield message.reply(
                 text="not yet implemented pydoc look up. this is a %s" % message.data.__class__.__name__)
         else:
             try:
@@ -72,20 +81,34 @@ class general():
                 raise Exception("specifed command not found")
             doc = func.__doc__
             if not doc:
-                return message.reply("No help found for specified command")
+                yield message.reply("No help found for specified command")
             else:
-                return message.reply(doc.split("\n")[0])
+                doc = "%s: %s" % (com, doc.split("\n")[0])
+                for doc in doc.split(". "):
+                    yield message.reply(doc)
 
     @command
     def strip(self, message):
+        "strip the message of any whitespace"
         return message.reply(message.text.strip())
 
     @command
-    def blank(self, message):
-        return message.reply("", data=message.data)
+    def quote(self, message):
+        """capture the N number of previous messages and and output it as data"""
+        try:
+            count = int(message.text or 1)
+        except:
+            raise Exception("needs an integer for number of lines")
+
+        lines = list(self.bot.message_buffer[message.server][message.params])[1:count + 1][::-1]
+        count = len(lines)
+        lines = "\n".join([x.to_pretty() for x in lines])
+
+        return message.reply("captured %s lines!" % count, data=lines)
 
     @command
     def sprunge(self, arg, target):
+        """redirect output to a sprunge and return the link"""
         lines = []
         arg = arg
         try:
@@ -94,124 +117,44 @@ class general():
                 if x is None:
                     lines.append(str(arg.text))
                 else:
-                    lines.append(str(x.text))
+                    lines.append(str(x.data))
         except GeneratorExit:
-            data = {'sprunge': '\n'.join(lines)}
-            response = urllib.request.urlopen(urllib.request.Request('http://sprunge.us',
-                                                                     urllib.parse.urlencode(data).encode(
-                                                                         'utf-8'))).read().decode()
-            print(response)
-            target.send(arg.reply(text=response))
+            if lines:
+                data = {'sprunge': '\n'.join(lines)}
+                response = urllib.request.urlopen(urllib.request.Request('http://sprunge.us',
+                                                                         urllib.parse.urlencode(data).encode(
+                                                                             'utf-8'))).read().decode()
+                target.send(arg.reply(text=response))
             target.close()
 
     @command
-    def collect(self, arg, target):
+    def cat(self, arg, target):
+        """concat all messages to one line joined by arg.text or ' '"""
         lines = []
-        arg = arg
+        joiner = arg.text or " "
         try:
             while 1:
                 x = yield
                 if x is None:
-                    lines.append(str(arg.text))
+                    pass
                 else:
                     lines.append(str(x.text))
         except GeneratorExit:
-            target.send(arg.reply(text='; '.join(lines)))
+            target.send(arg.reply(text=joiner.join(lines)))
             target.close()
 
-    @regex(r"^s([:/%|\!@,])((?:(?!\1)[^\\]|\\.)*)\1((?:(?!\1)[^\\]|\\.)*)\1([gi\d]*)(?: +(.+))")
-    def sedr(self, message):
-        print(message.groups)
-        delim, find, sub, flags, text = message.groups
-
-        sub = re.sub(r"\\" + delim, delim, sub)
-        action = False
-        kwargs = {"count": 1}
-        if "i" in flags:
-            kwargs["flags"] = re.IGNORECASE
-        if text is None:
-            for msg in list(self.bot.message_buffer[message.server][message.params])[1:]:
-                matchobj = timed(lambda:
-                                 bool(re.search(find, msg.text,
-                                                **({"flags": re.IGNORECASE} if "i" in flags else {}))))
-                if matchobj:
-                    text = msg.text
-                    if msg.action:
-                        action = True
-                    break
-            if not text:
-                raise Exception("No text and no matching message found")
-        else:
-            text = self.bot.buffer_replace(text, message.server, message.params, offset=1)
-
-        if not sub:
-            sub = ""
-        index = re.search(r".*?(\d+)", flags)
-        if "g" not in flags and index is not None:
-            index = int(index.group(1))
-            text = timed(lambda: [text[:x.start()] + x.expand(sub) + text[x.end():] for x in [[x for x, y in zip(
-                re.finditer(find, text, **({"flags": re.IGNORECASE} if "i" in flags else {})), range(index))][-1]]][
-                0])  # erm ... basically get the nth matchobject and do stuff
-            result = message.reply(text)
-            # result = message.reply(timed(re.sub, args=(find, replaceNthWith(index, sub), text)))    # more readable but also less efficient!
-        else:
-            if "g" in flags:
-                kwargs["count"] = 0
-            result = message.reply(timed(re.sub, args=(find, sub, text), kwargs=kwargs))
-
-        if action:
-            result.action = True
-        return result
+    @command
+    def wc(self, arg, target):
+        count = 0
+        try:
+            while 1:
+                x = yield
+                if x is None:
+                    pass
+                else:
+                    count+=1
+        except GeneratorExit:
+            target.send(arg.reply(data=count))
+            target.close()
 
 
-    @command("sed")
-    def sedc(self, message):
-        text = None
-
-        match = self.sedcommand.search(message.text)
-        if match:
-            delim, find, sub, flags, text = match.groups()
-            sub = re.sub(r"\\" + delim, delim, sub)
-            action = False
-            kwargs = {"count": 1}
-            if "i" in flags:
-                kwargs["flags"] = re.IGNORECASE
-            if not text:
-                for msg in list(self.bot.message_buffer[message.server][message.params])[1:]:
-                    matchobj = timed(lambda:
-                                     bool(re.search(find, msg.text,
-                                                    **({"flags": re.IGNORECASE} if "i" in flags else {}))))
-                    if matchobj:
-                        text = msg.text
-                        if msg.action:
-                            action = True
-                        break
-                if not text:
-                    raise Exception("No text and no matching message found")
-            if not sub:
-                sub = ""
-            index = re.search(r".*?(\d+)", flags)
-            if "g" not in flags and index is not None:
-                index = int(index.group(1))
-                text = timed(lambda: [text[:x.start()] + x.expand(sub) + text[x.end():] for x in [[x for x, y in zip(re.finditer(find, text, **({"flags": re.IGNORECASE} if "i" in flags else {})), range(index))][-1]]][0]) # erm ... basically get the nth matchobject and do stuff
-                result = message.reply(text)
-                #result = message.reply(timed(re.sub, args=(find, replaceNthWith(index, sub), text)))    # more readable but also less efficient!
-            else:
-                if "g" in flags:
-                    kwargs["count"] = 0
-                result = message.reply(timed(re.sub, args=(find, sub, text), kwargs=kwargs))
-
-            if action:
-                result.action = True
-            return result
-
-        else:
-            raise Exception("invalid pattern")
-
-
-def replaceNthWith(n, replacement):
-    def replace(match, c=[0]):
-        c[0] += 1
-        return match.expand(replacement) if c[0] == n else match.group(0)
-
-    return replace

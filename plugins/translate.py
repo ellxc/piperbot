@@ -33,6 +33,7 @@ class Google():
 
     @command("t")
     def translate(self, message):
+        """t [from:to] text -> attempts to translate the text from the specified language to the other specified language. any unspecified language will be assumed to be english"""
         return message.reply(self.parse_and_translate(message.text))
 
     def parse_and_translate(self, text, verbose=True):

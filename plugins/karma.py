@@ -30,6 +30,7 @@ class Karma:
 
     @command("karma")
     def asd(self, message):
+        """shows you your karma or the specified object's karma, karma is gained incrementing or decrementing an object. like so Penguin++"""
         if message.text:
             checked = set()
             for key in message.text.split():

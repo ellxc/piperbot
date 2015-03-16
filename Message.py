@@ -74,6 +74,16 @@ class Message():
             self.command, self.params, ("\001ACTION " if self.action else ""), text[:200],
             ("\001" if self.action else ""))
 
+    def to_pretty(self):
+        text = self.timestamp.strftime("%x %X")
+        text += " "
+        if self.action:
+            text += " * %s " % self.nick
+        else:
+            text += "< %s> " % self.nick
+        text += self.text.rstrip("\n")
+        return text
+
     def reply(self, text=None, data=None):
         return Message(server=self.server, nick=self.nick, command=self.command,
                        domain=self.domain, action=self.action, groups=self.groups, user=self.user,

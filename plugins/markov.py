@@ -74,7 +74,8 @@ class markov:
         self.chain = mongomarkov()
     
     @command("talk")
-    def talk(self,message):
+    def talk(self, message):
+        """generates garbage text based off of what it has learnt. sorry if it says something rude!"""
         if message.text.startswith("about ") and len(message.text.split()) > 1:
             about = message.text.split()[1]
             line = self.chain.make_line_from(about)

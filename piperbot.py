@@ -1,5 +1,5 @@
 import re
-from collections import defaultdict, deque
+from collections import defaultdict, deque, Counter
 import threading
 from multiprocessing.pool import ThreadPool
 from queue import PriorityQueue, Empty
@@ -9,8 +9,12 @@ import os
 import json
 import codecs
 from sys import argv
-from serverconnection import ServerConnection
+import urllib.parse
+import urllib.response
+import urllib.request
+from Message import Message
 
+from serverconnection import ServerConnection
 
 
 class User:
@@ -43,6 +47,8 @@ class PiperBot(threading.Thread):
 
         self.running = False
 
+        self.spamlimit = 3
+        self.pmspamlimit = 5
 
     def buffer_replace(self, text, servername, channel, offset=0):
 
@@ -163,43 +169,11 @@ class PiperBot(threading.Thread):
             response.command = "PONG"
             self.send(response)
         elif message.command == "PRIVMSG":
-            if message.text.startswith(self.command_char) and message.text[1:]:
-                print("command: ", message.text[1:])
-
-                commands = map(lambda x: [(command, " ".join(args)) for command, *args in [x.split(" ")]][0],
-                               map(lambda x: x.strip(), message.text[1:].split(" || ")))
-                funcs = []
-                args = []
-                for func, arg in commands:
-                    if func in self.commands:
-                        if self.commands[func][1].get("adminonly", False) and message.nick not in self.admins[
-                            message.server]:
-                            self.send(message.reply("admin only command: " + func))
-                            break
-                        else:
-                            funcs.append(self.commands[func][0])
-                            if self.commands[func][1].get("bufferreplace", True):
-                                try:
-                                    arg = self.buffer_replace(arg, message.server, message.params)
-                                except Exception as e:
-                                    self.send(message.reply("error: " + str(e)))
-                                    break
-                            args.append(message.reply(text=arg))
-                    else:
-                        self.send(message.reply("unrecognised command: " + func))
-                        break
-                else:
-                    print("commands: ", " ".join(map(str, funcs)))
-                    print("args: ", " ".join(map(str, args)))
-
-
-                    def onError(e):
-                        self.send(message.reply(type(e).__name__ + (": " + str(e)) if str(e) else ""))
-
-
-                    self.worker_pool.apply_async(self.pipe, args=(funcs, args), error_callback=onError)
-
             self.message_buffer[message.server][message.params].appendleft(message)
+
+            if message.text.startswith(self.command_char) and message.text[1:]:
+                self.worker_pool.apply_async(self.handle_command,  args=(message,))
+
 
         triggered = []
         for plugin in self.plugins.values():
@@ -217,6 +191,92 @@ class PiperBot(threading.Thread):
                 if message.command.lower() == event.lower():
                     triggered.append((efunc, message))
         self.worker_pool.starmap_async(self.call_trigger, triggered, error_callback=print)
+
+
+    def handle_command(self, message):
+        try:
+            while "$(" in message.text:
+                message = self.handle_inners(message)
+
+            funcs, args = self.funcs_n_args(message)
+
+            res = self.resulter()
+            next(res)
+
+            spam = self.spamfilter(res)
+            next(spam)
+
+            pipe = spam
+            for func, args in zip(funcs[::-1], args[::-1]):
+                pipe = func(args, pipe)
+
+            pipe.send(None)
+            pipe.close()
+        except Exception as e:
+            self.send(message.reply(type(e).__name__ + (": " + str(e)) if str(e) else ""))
+
+    def funcs_n_args(self, message):
+        commands = map(lambda x: [(command, " ".join(args)) for command, *args in [x.split(" ")]][0],
+                       map(lambda x: x.strip(), message.text[1:].split(" || ")))
+        funcs = []
+        args = []
+        for i, (func, arg) in enumerate(commands):
+            if func in self.commands:
+                if self.commands[func][1].get("adminonly", False) and \
+                                message.nick not in self.admins[message.server]:
+                    raise Exception("admin only command: " + func)
+                else:
+                    funcs.append(self.commands[func][0])
+                    if self.commands[func][1].get("bufferreplace", True):
+                        arg = self.buffer_replace(arg, message.server, message.params, offset=1)
+                    args.append(message.reply(text=arg))
+            else:
+                raise Exception("unrecognised command: " + func)
+
+        return funcs, args
+
+
+
+
+    def handle_inners(self, message):
+        first = message.text.find("$(")
+
+        left = message.text[:first]
+        rest = message.text[first+1:]
+        openbr = 0
+        prevchar = ""
+        for i, char in enumerate(rest):
+            if prevchar+char == "$(":
+                openbr += 1
+            if char == ")":
+                if openbr != 0:
+                    openbr -= 1
+                else:
+                    final = i
+                    break
+            prevchar = char
+        else:
+            raise Exception("no closing bracket")
+
+        middle = rest[:final]
+        right = rest[final+1:]
+
+        while "$(" in middle:
+            middle = self.handle_inners(message.reply(middle)).text
+
+        funcs, args = self.funcs_n_args(message.reply(middle))
+        text = []
+        cat = self.concater(text)
+        next(cat)
+        pipe = cat
+        for func, args in zip(funcs[::-1], args[::-1]):
+            pipe = func(args, pipe)
+
+        pipe.send(None)
+        pipe.close()
+
+        return message.reply(text=left + " ".join(text) + right)
+
 
     def call_trigger(self, func, message):
         res = self.resulter()
@@ -237,24 +297,48 @@ class PiperBot(threading.Thread):
         else:
             raise Exception("no such server: " + message.server)
 
-    def pipe(self, funcs, args):
-
-        res = self.resulter()
-        next(res)
-
-        piped = res
-        for func, args in zip(funcs[::-1], args[::-1]):
-            piped = func(args, piped)
-
-        piped.send(None)
-        piped.close()
+    def spamfilter(self, target):
+        spams = defaultdict(lambda: defaultdict(list))
+        try:
+            while 1:
+                x = yield
+                if x.params.startswith("#"):
+                    spams[x.server][x.params].append(x.text)
+                    if len(spams[x.server][x.params]) <= self.spamlimit:
+                        target.send(x)
+                else:
+                    spams[x.server][x.params].append(x.text)
+                    if len(spams[x.server][x.params]) <= self.pmspamlimit:
+                        target.send(x)
+        except GeneratorExit:
+            for server, messages in spams.items():
+                for channel, lines in messages.items():
+                    if channel.startswith("#"):
+                        spamlimit = self.spamlimit
+                    else:
+                        spamlimit = self.pmspamlimit
+                    if len(lines) > spamlimit:
+                        data = {'sprunge': '\n'.join(lines)}
+                        response = urllib.request.urlopen(urllib.request.Request('http://sprunge.us',
+                                                                                 urllib.parse.urlencode(data).encode(
+                                                                                     'utf-8'))).read().decode()
+                        print(channel, lines)
+                        target.send(Message(server=server, params=channel,command="PRIVMSG", text="spam detected, here is the output: %s" % response))
+            target.close()
 
     def resulter(self):
         try:
             while 1:
                 x = yield
-                print("resulter: ", x)
                 self.send(x)
+        except GeneratorExit:
+            pass  # pipe closed
+
+    def concater(self, results):
+        try:
+            while 1:
+                x = yield
+                results.append(x.text)
         except GeneratorExit:
             pass  # pipe closed
 

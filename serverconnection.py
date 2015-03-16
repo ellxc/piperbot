@@ -4,6 +4,7 @@ import threading
 import re
 from ssl import wrap_socket
 from select import select
+
 from Message import Message
 
 
@@ -90,7 +91,7 @@ class ServerConnection():
 
 
     def disconnect(self, message=""):
-        self.socket.send(('QUIT ' + message + '\r\n').encode())
+        self.socket.send(('QUIT :' + message + '\r\n').encode())
         self.socket.close()
         self.connected = False
 

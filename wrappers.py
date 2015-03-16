@@ -71,11 +71,11 @@ def command(name=None, simple=False, **kwargs):
                             else:
                                 if formats:
                                     if line.data is not None:
-                                        x = func(self, line.reply(text=arg.text.format(*([line.data] * formats))))
+                                        x = func(self, line.reply(text=arg.text.format(*([line.data] * formats)), data=line.data))
                                     else:
-                                        x = func(self, line.reply(text=arg.text.format(*([line.text] * formats))))
+                                        x = func(self, line.reply(text=arg.text.format(*([line.text] * formats)), data=line.data))
                                 else:
-                                    x = func(self, line.reply(text=arg.text + " " + line.text))
+                                    x = func(self, line.reply(text=arg.text + (" " if arg.text else "") + line.text, data=line.data))
                             if x is not None:
                                 if inspect.isgenerator(x):
                                     for y in x:

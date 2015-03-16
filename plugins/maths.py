@@ -50,6 +50,7 @@ class countdown:
     @command("solve")
     @command("countdown")
     def cd_solve(self, message):
+        """[target] [numbers]* -> attempts to reach the target using only the available numbers once each. a solver for the countdown numbers game"""
         target, *numbers = [int(x) for x in message.text.split()]
         if len(numbers) > 6:
             raise Exception("too many numbers")
@@ -64,6 +65,7 @@ class countdown:
     @command("cdbest")
     @command("solvebest")
     def cd_solve_best(self, message):
+        """[target] [numbers]* -> attempts to find the best solution using only the available numbers once each."""
         target, *numbers = [int(x) for x in message.text.split()]
         expr, value = solve_best(target, numbers)
         if value == target:
@@ -74,6 +76,7 @@ class countdown:
     @command("cdn")
     @command("cdnewgame")
     def newgame(self, message):
+        """starts a new countdown numbers game for the current channel"""
         if not self.games[message.params]:
             target = randint(0, 999)
             numbers = sample(self.big, 2) + sample(self.small, 4)
@@ -91,6 +94,7 @@ class countdown:
     @command("cdg", simple=True)
     @command("cdgiveup", simple=True)
     def giveup(self, message):
+        """gives up the current game in the channel, and attempts to solve it"""
         if self.games[message.params]:
             target = self.games[message.params].target
             numbers = self.games[message.params].numbers
@@ -106,6 +110,7 @@ class countdown:
     @command("cda")
     @command("cdanswer")
     def answer(self, message):
+        """this is how you submit answers for a countdown game in the channel."""
         if self.games[message.params]:
             numbersused = Counter(map(float, re.findall("[0-9]+", message.text)))
             numberset = Counter(self.games[message.params].numbers)

@@ -8,7 +8,7 @@ import random
 from wrappers import *
 import pymongo
 import sys
-
+import re
 
 class AttrDict(defaultdict):
     def __init__(self, *args, **kwargs):
@@ -288,7 +288,9 @@ globalenv = {
     "time": datetime.time,
     "timedelta": datetime.timedelta,
     "timestamp": datetime.datetime.fromtimestamp,
-    "data": None,
+    "message": None,
+    "re": re,
+
 }
 
 localenv = {}
@@ -307,9 +309,7 @@ def attrpath(node):
 def eval_(expr, msg):
     env = localenv.copy()
     env.update(globalenv)
-    print("asd")
     asd = [(key, userenv[key]) for key in list(userenv)]
-    print("zxc")
     #env.update(dict(userenv))
     body = ast.parse(expr, mode='single').body
     if len(body) > 10: raise Exception("too many lines!")
@@ -544,8 +544,9 @@ class Eval:
                 db[user].insert({"key": key, "bin": pickle.dumps(val)})
 
     @command(">", bufferreplace=False)
+    @command("seval", bufferreplace=False)
     def calc(self, arg, target):
-
+        """oh boy, so this is a python interpreter, you can do most things you could do from a terminal, but only single line statements are allowed. you can chain multiple single statements together using ';' and you can access any piped in message via 'message'"""
         try:
             while 1:
                 message = yield
@@ -563,8 +564,27 @@ class Eval:
         except GeneratorExit:
             target.close()
 
+    @command("filter")
+    def filt(self, arg, target):
+        try:
+            while 1:
+                message = yield
+                if message is None:
+                    pass
+                else:
+                    globalenv["message"] = message
+                    response = False
+                    for response in eval_(arg.text.strip(), arg):
+                        pass
+                    globalenv["message"] = None
 
+                    if response:
+                        target.send(message)
+
+        except GeneratorExit:
+            target.close()
 
     @command("liteval")
     def liteval(self, message):
+        'will evaluate python literals. pretty simple version of seval'
         return message.reply(repr(ast.literal_eval(message.text.strip())))
