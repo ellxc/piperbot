@@ -26,15 +26,12 @@ class Google():
                 "ukrainian" : "uk", "vietnamese": "vi", "welsh": "cy", "yiddish": "yi", "xhosa": "xh"}
         
             self.lang_out = dict((value,key) for (key, value) in list(self.lang_in.items()))
-    
-    @command("tp")
-    def plain_translate(self, message):
-        return message.reply(self.parse_and_translate(message.text, verbose=False))
 
     @command("t")
     def translate(self, message):
         """t [from:to] text -> attempts to translate the text from the specified language to the other specified language. any unspecified language will be assumed to be english"""
-        return message.reply(self.parse_and_translate(message.text))
+        lang, *tr = self.parse_and_translate(message.text)
+        return message.reply(", ".join(tr), lang + ", ".join(tr))
 
     def parse_and_translate(self, text, verbose=True):
         match = self.param.match(text.lower())
@@ -72,9 +69,92 @@ class Google():
         lang = self.lang_out[response["src"]] if response["src"] in self.lang_out else response["src"]
         lang = lang + " to " + self.lang_out[dest_lang] + ": "
         if verbose and "dict" in response and len(response["dict"][0]["terms"]) > 1:
-            return lang + '"' + '", "'.join(response["dict"][0]["terms"][:-1]) + '" or "' \
-                + response["dict"][0]["terms"][-1] + '"'
+            return [lang] + response["dict"][0]["terms"]
         elif verbose:
-            return lang + "".join([x["trans"] for x in response["sentences"]])
+            return (lang, "".join([x["trans"] for x in response["sentences"]]))
         else:
             return "".join([x["trans"] for x in response["sentences"]])
+        
+@plugin
+class morse:
+    
+    morsecodes = {
+        "a" : ".-",
+        "b" : "-...",
+        "c" : "-.-.",
+        "d" : "-..",
+        "e" : ".",
+        "f" : "..-.",
+        "g" : "--.",
+        "h" : "....",
+        "i" : "..",
+        "j" : ".---",
+        "k" : "-.-",
+        "l" : ".-..",
+        "m" : "--",
+        "n" : "-.",
+        "o" : "---",
+        "p" : ".--.",
+        "q" : "--.-",
+        "r" : ".-.",
+        "s" : "...",
+        "t" : "-",
+        "u" : "..-",
+        "v" : "...-",
+        "w" : ".--",
+        "x" : "-..-",
+        "y" : "-.--",
+        "z" : "--..",
+        "0" : "-----",
+        "1" : ".----",
+        "2" : "..---",
+        "3" : "...--",
+        "4" : "....-",
+        "5" : ".....",
+        "6" : "-....",
+        "7" : "--...",
+        "8" : "---..",
+        "9" : "----.",
+        "." : ".-.-.-",
+        "," : "--..--",
+        "?" : "..--..",
+        "'" : ".----.",
+        "!" : "-.-.--",
+        "/" : "-..-.",
+        "(" : "-.--.",
+        ")" : "-.--.-",
+        "&" : ".-...",
+        ":" : "---...",
+        ";" : "-.-.-.",
+        "=" : "-...-",
+        "+" : ".-.-.",
+        "-" : "-....-",
+        "_" : "..--.-",
+        '"' : ".-..-.",
+        "$" : "...-..-",
+        "@" : ".--.-.",
+        " " : "/"}
+
+    umorsecodes = dict([(value,key) for (key, value) in list(morsecodes.items())])
+
+    @command
+    def morse(self, message):
+        ret = []
+        for char in message.data:
+            if char in self.morsecodes:
+                ret.append(self.morsecodes[char])
+            else:
+                ret.append("?")
+        return message.reply(" ".join(ret))
+    
+    @command
+    def umorse(self, message):
+        ret = []
+        textl = message.data.split(" ")
+        for char in textl:
+            if char in self.umorsecodes:
+                ret.append(self.umorsecodes[char])
+            else:
+                ret.append("?")
+
+        return message.reply("".join(ret))

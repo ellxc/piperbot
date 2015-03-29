@@ -8,58 +8,9 @@ import random
 from wrappers import *
 import pymongo
 import sys
+import json
 import re
-
-class AttrDict(defaultdict):
-    def __init__(self, *args, **kwargs):
-        defaultdict.__init__(self, self.__class__)
-
-    def __getattr__(self, name):
-        if name not in self.__dict:
-            if name.startswith("__"):
-                return self.__dict__[name]
-            else:
-                self.__dict[name] = AttrDict()
-        return self.__dict[name]
-
-    def __setattr__(self, key, value):
-        self.__dict[key] = value
-
-
-class Namespace(dict):
-    """A dict subclass that exposes its items as attributes.
-
-    Warning: Namespace instances do not have direct access to the
-    dict methods.
-    copied from http://code.activestate.com/recipes/577887-a-simple-namespace-class/
-    """
-
-    def __init__(self, obj=None):
-        super().__init__(obj if obj is not None else {})
-
-    def __dir__(self):
-        return tuple(self)
-
-    def __repr__(self):
-        return "%s(%s)" % (type(self).__name__, super().__repr__())
-
-    def __getattribute__(self, name):
-        try:
-            return self[name]
-        except KeyError:
-            try:
-                return self.__getattr__(name)
-            except:
-                pass
-
-            self[name] = Namespace()
-            return self[name]
-
-    def __setattr__(self, name, value):
-        self[name] = value
-
-    def __delattr__(self, name):
-        del self[name]
+import traceback
 
 boolops = {
     ast.And: all,
@@ -236,36 +187,6 @@ def ast_to_string(node):
             raise Exception(node)
 
 
-class datetime_(datetime.datetime):
-    def __repr__(self):
-        """Convert to formal string, for repr()."""
-        L = [self.year, self.month, self.day,  # These are never zero
-             self.hour, self.minute, self.second, self.microsecond]
-        if L[-1] == 0:
-            del L[-1]
-        if L[-1] == 0:
-            del L[-1]
-        s = ", ".join(map(str, L))
-        s = "%s(%s)" % ("datetime", s)
-        if self.tzinfo is not None:
-            assert s[-1:] == ")"
-            s = s[:-1] + ", tzinfo=%r" % self.tzinfo + ")"
-        return s
-
-
-class timedelta_(datetime.timedelta):
-    def __repr__(self):
-        if self.microseconds:
-            return "%s(%d, %d, %d)" % ('timedelta',
-                                       self.days,
-                                       self.seconds,
-                                       self.microseconds)
-        if self.seconds:
-            return "%s(%d, %d)" % ('timedelta',
-                                   self.days,
-                                   self.seconds)
-        return "%s(%d)" % ('timedelta', self.days)
-
 
 globalenv = {
     "maxint": sys.maxsize,
@@ -274,6 +195,11 @@ globalenv = {
     'map': map,
     'range': range,
     'str': str,
+    "int": int,
+    "dict": dict,
+    "set": set,
+    "sorted":sorted,
+    "json":json,
     'zip': zip,
     'list': list,
     'bool': bool,
@@ -295,7 +221,6 @@ globalenv = {
 
 localenv = {}
 
-userenv = defaultdict(AttrDict)
 
 
 def attrpath(node):
@@ -306,20 +231,15 @@ def attrpath(node):
         return node.id, []
 
 
-def eval_(expr, msg):
-    env = localenv.copy()
-    env.update(globalenv)
-    asd = [(key, userenv[key]) for key in list(userenv)]
-    #env.update(dict(userenv))
+def eval_(expr, env):
     body = ast.parse(expr, mode='single').body
-    if len(body) > 10: raise Exception("too many lines!")
     for stmt_or_expr in body:
         response = None
         if isinstance(stmt_or_expr, ast.Expr):
-            #response = eval_expr(stmt_or_expr.value, env)
-            response = timed(eval_expr, args=(stmt_or_expr.value, env))
+            response = eval_expr(stmt_or_expr.value, env)
+            #response = timed(eval_expr, args=(stmt_or_expr.value, env))
         elif isinstance(stmt_or_expr, ast.Assign):
-            env = eval_assign(stmt_or_expr, env, msg)
+            env = eval_assign(stmt_or_expr, env)
         else:
             raise Exception(ast.dump(stmt_or_expr))
 
@@ -327,20 +247,12 @@ def eval_(expr, msg):
             yield response
 
 
-def eval_assign(node, env, msg):
+def eval_assign(node, env):
     val = timed(eval_expr, args=(node.value, env))
     for x in node.targets:
         if isinstance(x, ast.Attribute):
             first, rest = attrpath(x)
-            if False: #first == msg.nick:
-                obj = userenv[first]
-                for attr in rest[:-1]:
-                    obj = getattr(obj, attr)
-                setattr(obj, x.attr, val)
-            elif first in userenv:
-                raise Exception("I'm afraid I can't let you do that.")
-            else:
-                setattr(timed(eval_expr, args=(x.value, localenv)), x.attr, val)
+            setattr(timed(eval_expr, args=(x.value, localenv)), x.attr, val)
         elif isinstance(x, ast.Name):
             if x.id in globalenv:
                 env[x.id] = val
@@ -387,7 +299,6 @@ class Lambda():
     def __call__(self, *args, **kwargs):
         env = self.env.copy()
         env.update(globalenv)
-        env.update(userenv)
         env.update(localenv)
         return eval_expr(self.body, getenv(funcname="<lambda>", call_args=args, call_kwargs=kwargs,
                                            env=env, **self.fields))
@@ -527,56 +438,58 @@ def getenv(funcname, args, vararg, kwarg, defaults, call_args, call_kwargs, env,
 
 @plugin
 class Eval:
-    @on_load
-    def init(self):
-        con = pymongo.MongoClient()
-        db = con["seval"]
-        for table in db.collection_names():
-            for record in db[table].find({"bin": {"$exists": True}}):
-                userenv[table][record["key"]] = pickle.loads(record["bin"])
+    # #@on_load
+    # def init(self):
+    #     con = pymongo.MongoClient()
+    #     db = con["seval"]
+    #     for table in db.collection_names():
+    #         for record in db[table].find({"bin": {"$exists": True}}):
+    #             userenv[table][record["key"]] = pickle.loads(record["bin"])
+    #
+    # #@on_unload
+    # def save(self):
+    #     con = pymongo.MongoClient()
+    #     db = con["seval"]
+    #     for user, space in userenv.items():
+    #         for key, val in space.items():
+    #             db[user].insert({"key": key, "bin": pickle.dumps(val)})
 
-    @on_unload
-    def save(self):
-        con = pymongo.MongoClient()
-        db = con["seval"]
-        for user, space in userenv.items():
-            for key, val in space.items():
-                db[user].insert({"key": key, "bin": pickle.dumps(val)})
-
-    @command(">", bufferreplace=False)
-    @command("seval", bufferreplace=False)
+    @command(">", bufferreplace=False, argparse=False)
+    @command("seval", bufferreplace=False, argeparse=False)
     def calc(self, arg, target):
         """oh boy, so this is a python interpreter, you can do most things you could do from a terminal, but only single line statements are allowed. you can chain multiple single statements together using ';' and you can access any piped in message via 'message'"""
+        env = dict(globalenv)
+        env.update(localenv)
+
         try:
             while 1:
                 message = yield
                 if message is None:
-                    globalenv["message"] = arg
-                    for response in eval_(arg.text.strip(), arg):
-                        target.send(arg.reply(data=response))
-                    globalenv["message"] = None
+                    env["message"] = arg
+                    for response in eval_(arg.text.strip(), env):
+                        target.send(arg.reply(response, repr(response)))
                 else:
-                    globalenv["message"] = message
-                    for response in eval_(arg.text.strip(), arg):
-                        target.send(arg.reply(data=response))
-                    globalenv["message"] = None
+                    env["message"] = message
+                    for response in eval_(arg.text.strip(), env):
+                        target.send(arg.reply(response, repr(response)))
 
         except GeneratorExit:
             target.close()
 
-    @command("filter")
+    @command("filter", bufferreplace=False, argeparse=False)
     def filt(self, arg, target):
+        env = dict(globalenv)
+        env.update(localenv)
         try:
             while 1:
                 message = yield
                 if message is None:
                     pass
                 else:
-                    globalenv["message"] = message
+                    env["message"] = message
                     response = False
-                    for response in eval_(arg.text.strip(), arg):
+                    for response in eval_(arg.text.strip(), env):
                         pass
-                    globalenv["message"] = None
 
                     if response:
                         target.send(message)
@@ -584,7 +497,7 @@ class Eval:
         except GeneratorExit:
             target.close()
 
-    @command("liteval")
+    @command("liteval", bufferreplace=False, argeparse=False)
     def liteval(self, message):
         'will evaluate python literals. pretty simple version of seval'
         return message.reply(repr(ast.literal_eval(message.text.strip())))

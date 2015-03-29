@@ -75,7 +75,7 @@ class ServerConnection():
                             lines = data.strip().split("\r\n")
                             for line in lines:
                                 if line:
-                                    msg = Message(self.server_name, *self.message_splitter.match(line).groups(""))
+                                    msg = Message.from_line(line,self.server_name)#  self.server_name, *self.message_splitter.match(line).groups(""))
                                     if msg.command == "PRIVMSG" and msg.params == self.serverconnection.nick:
                                         msg.params = msg.nick
                                     self.in_queue.put(msg)

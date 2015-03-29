@@ -1,5 +1,5 @@
 import re
-from collections import defaultdict, deque, Counter
+from collections import defaultdict, deque
 import threading
 from multiprocessing.pool import ThreadPool
 from queue import PriorityQueue, Empty
@@ -9,18 +9,30 @@ import os
 import json
 import codecs
 from sys import argv
-import urllib.parse
-import urllib.response
-import urllib.request
-from Message import Message
+import sys
+import pymongo
+import string
+import functools
+import traceback
+from operator import itemgetter
 
 from serverconnection import ServerConnection
+from itertools import chain
 
 
 class User:
     def __init__(self):
         self.channels = defaultdict(list)
         self.data = {}
+
+
+def _coroutine(func):
+    @functools.wraps(func)
+    def generator(*args, **kwargs):
+        x = func(*args, **kwargs)
+        next(x)
+        return x
+    return generator
 
 
 class PiperBot(threading.Thread):
@@ -36,10 +48,22 @@ class PiperBot(threading.Thread):
         self.command_char = "#"
         self.in_queue = PriorityQueue()
 
+        self.apikeys = {}
+
         self.commands = {}
+        self.aliases = {}
         self.plugins = {}
 
-        self.worker_pool = ThreadPool(processes=4)
+        self.pre_command_exts = []
+        self.post_command_exts = []
+        self.pre_event_exts = []
+        self.post_event_exts = []
+        self.pre_trigger_exts = []
+        self.post_trigger_exts = []
+        self.pre_regex_exts = []
+        self.post_regex_exts = []
+
+        self.worker_pool = ThreadPool(processes=8)
 
         self.message_buffer = defaultdict(lambda: defaultdict(lambda: deque(maxlen=50)))
         self.buffer_pattern = re.compile(r"(?:(\w+)|(\s)|^)(?:\^(\d+)|(\^+))")
@@ -47,8 +71,6 @@ class PiperBot(threading.Thread):
 
         self.running = False
 
-        self.spamlimit = 3
-        self.pmspamlimit = 5
 
     def buffer_replace(self, text, servername, channel, offset=0):
 
@@ -152,6 +174,53 @@ class PiperBot(threading.Thread):
                 print("loaded command: ", args["command"])
             else:
                 print("command overlap! : " + args["command"])
+
+        for (priority, func) in plugin_instance._command_extensions:
+            if priority < 1:
+                self.pre_command_exts.append((priority,
+                                              plugin_instance.__module__ + "." + plugin_instance.__class__.__name__,
+                                              func))
+            else:
+                self.post_command_exts.append((priority,
+                                               plugin_instance.__module__ + "." + plugin_instance.__class__.__name__,
+                                               func))
+        for (priority, func) in plugin_instance._event_extensions:
+            if priority < 1:
+                self.pre_event_exts.append((priority,
+                                            plugin_instance.__module__ + "." + plugin_instance.__class__.__name__,
+                                            func))
+            else:
+                self.post_event_exts.append((priority,
+                                            plugin_instance.__module__ + "." + plugin_instance.__class__.__name__,
+                                            func))
+        for (priority, func) in plugin_instance._trigger_extensions:
+            if priority < 1:
+                self.pre_trigger_exts.append((priority,
+                                              plugin_instance.__module__ + "." + plugin_instance.__class__.__name__,
+                                              func))
+            else:
+                self.post_trigger_exts.append((priority,
+                                               plugin_instance.__module__ + "." + plugin_instance.__class__.__name__,
+                                               func))
+        for (priority, func) in plugin_instance._regex_extensions:
+            if priority < 1:
+                self.pre_regex_exts.append((priority,
+                                            plugin_instance.__module__ + "." + plugin_instance.__class__.__name__,
+                                            func))
+            else:
+                self.post_regex_exts.append((priority,
+                                             plugin_instance.__module__ + "." + plugin_instance.__class__.__name__,
+                                             func))
+
+        self.post_command_exts.sort(key=itemgetter(0, 1))
+        self.pre_command_exts.sort(key=itemgetter(0, 1))
+        self.post_event_exts.sort(key=itemgetter(0, 1))
+        self.pre_event_exts.sort(key=itemgetter(0, 1))
+        self.post_regex_exts.sort(key=itemgetter(0, 1))
+        self.pre_regex_exts.sort(key=itemgetter(0, 1))
+        self.post_trigger_exts.sort(key=itemgetter(0, 1))
+        self.pre_trigger_exts.sort(key=itemgetter(0, 1))
+
         if plugin._plugin_thread:
             plugin_instance.start()
 
@@ -159,6 +228,30 @@ class PiperBot(threading.Thread):
         for func, args in self.plugins[plugin_name]._commands:
             if args["command"] in self.commands.keys():
                 del self.commands[args["command"]]
+        for lump in self.post_command_exts:
+            if lump[1] == plugin_name:
+                self.post_command_exts.remove(lump)
+        for lump in self.pre_command_exts:
+            if lump[1] == plugin_name:
+                self.pre_command_exts.remove(lump)
+        for lump in self.post_event_exts:
+            if lump[1] == plugin_name:
+                self.post_event_exts.remove(lump)
+        for lump in self.pre_event_exts:
+            if lump[1] == plugin_name:
+                self.pre_event_exts.remove(lump)
+        for lump in self.post_regex_exts:
+            if lump[1] == plugin_name:
+                self.post_regex_exts.remove(lump)
+        for lump in self.pre_regex_exts:
+            if lump[1] == plugin_name:
+                self.pre_regex_exts.remove(lump)
+        for lump in self.post_trigger_exts:
+            if lump[1] == plugin_name:
+                self.post_trigger_exts.remove(lump)
+        for lump in self.pre_trigger_exts:
+            if lump[1] == plugin_name:
+                self.pre_trigger_exts.remove(lump)
         for func in self.plugins[plugin_name]._onUnloads:
             func()
         del self.plugins[plugin_name]
@@ -172,8 +265,11 @@ class PiperBot(threading.Thread):
             self.message_buffer[message.server][message.params].appendleft(message)
 
             if message.text.startswith(self.command_char) and message.text[1:]:
-                self.worker_pool.apply_async(self.handle_command,  args=(message,))
-
+                first = message.text[1:].split()[0]
+                if first == "alias":
+                    self.handle_alias_assign(message)
+                elif first in self.commands or first in self.aliases:
+                    self.worker_pool.apply_async(self.handle_command,  args=(message,))
 
         triggered = []
         for plugin in self.plugins.values():
@@ -183,37 +279,102 @@ class PiperBot(threading.Thread):
                     for groups in matches:
                         temp = message.copy()
                         temp.groups = groups
-                        triggered.append((rfunc, temp))
+                        triggered.append((rfunc, temp, self.pre_regex_exts, self.post_trigger_exts))
             for trigger, tfunc in plugin._triggers:
                 if trigger(message, bot):
-                    triggered.append((tfunc, message))
+                    triggered.append((tfunc, message, self.pre_trigger_exts, self.post_trigger_exts))
             for event, efunc in plugin._handlers:
                 if message.command.lower() == event.lower():
-                    triggered.append((efunc, message))
-        self.worker_pool.starmap_async(self.call_trigger, triggered, error_callback=print)
+                    triggered.append((efunc, message, self.pre_event_exts, self.post_event_exts))
+        self.worker_pool.starmap_async(self.call_triggered, triggered, error_callback=print)
+
+    def call_triggered(self, func, message, pre=[], post=[]):
+        pipe = self.resulter()
+
+        for _, _, func_, in post:
+                pipe = func_(message, pipe)
+
+        pipe = func(pipe)
+        next(pipe)
+        for _, _, func_ in pre:
+            pipe = func_(message, pipe)
+
+        pipe.send(message)
+
+    def handle_alias_assign(self, message):
+        try:
+            name, *alias = message.text[len(self.command_char)+5:].split("=")
+            name = name.strip()
+            alias = "=".join(alias).strip()
+            if name in self.commands:
+                raise Exception("cannot overwrite existing command")
+
+            commands = map(lambda x: [(command, " ".join(args)) for command, *args in [x.split(" ")]][0],
+                           map(lambda x: x.strip(), alias.split(" || ")))
+            funcs = []
+            args = []
+            for func, arg in commands:
+                if func in self.commands:
+                        funcs.append(self.commands[func][1]["command"])
+                        args.append(arg)
+                elif func in self.aliases:
+                    if func == name:
+                        raise Exception("recursion detected")
+                    funcs_, args_ = self.aliases[func]
+                    funcs.extend(funcs_)
+                    args.extend(args_)
+                else:
+                    raise Exception("unrecognised command: " + func)
+
+            self.aliases[name] = list(zip(funcs, args))
+
+            self.send(message.reply("The alias %s has been saved" % name))
+        except Exception as e:
+            self.send(message.reply(type(e).__name__ + (": " + str(e)) if str(e) else ""))
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            print("*** print_tb:")
+            traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
+
+
 
 
     def handle_command(self, message):
         try:
-            while "$(" in message.text:
-                message = self.handle_inners(message)
+            def prepper(results):
+                while 1:
+                    x = yield
+                    results.append(x)
 
-            funcs, args = self.funcs_n_args(message)
+            results = []
 
-            res = self.resulter()
-            next(res)
+            prepipe = prepper(results)
+            next(prepipe)
 
-            spam = self.spamfilter(res)
-            next(spam)
+            for _, _, f in self.pre_command_exts:
+                prepipe = f(message, prepipe)
+            prepipe.send(None)
 
-            pipe = spam
-            for func, args in zip(funcs[::-1], args[::-1]):
-                pipe = func(args, pipe)
+            for result in results:
 
-            pipe.send(None)
-            pipe.close()
+                while "$(" in result.text:
+                    result = self.handle_inners(result)
+
+                funcs, args = self.funcs_n_args(result)
+
+                pipe = self.resulter()
+
+                for func, args in chain([(f, message) for _, _, f in self.post_command_exts],
+                                        list(zip(funcs[::-1], args[::-1]))):
+                    pipe = func(args, pipe)
+
+                pipe.send(None)
+                pipe.close()
         except Exception as e:
             self.send(message.reply(type(e).__name__ + (": " + str(e)) if str(e) else ""))
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            print("*** print_tb:")
+            traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
+
 
     def funcs_n_args(self, message):
         commands = map(lambda x: [(command, " ".join(args)) for command, *args in [x.split(" ")]][0],
@@ -229,13 +390,87 @@ class PiperBot(threading.Thread):
                     funcs.append(self.commands[func][0])
                     if self.commands[func][1].get("bufferreplace", True):
                         arg = self.buffer_replace(arg, message.server, message.params, offset=1)
-                    args.append(message.reply(text=arg))
+                    temp = message.reply(arg)
+
+                    if self.commands[func][1].get("argparse", False):
+                        text, args_ = self.parse_args(temp, self.commands[func][0], func)
+
+                        temp = message.reply(text)
+                        temp.args = args_
+
+                    args.append(temp)
+            elif func in self.aliases:
+
+                funcs.append(self.argpass)
+                args.append(message.reply(arg))
+
+
+                for func_, arg_ in self.aliases[func]:
+                    if self.commands[func_][1].get("adminonly", False) and \
+                                    message.nick not in self.admins[message.server]:
+                        raise Exception("admin only command: " + func)
+                    else:
+                        funcs.append(self.commands[func_][0])
+                        if self.commands[func_][1].get("bufferreplace", True):
+                            arg__ = self.buffer_replace(arg_, message.server, message.params, offset=1)
+                        else:
+                            arg__ = arg_
+                        temp = message.reply(arg__)
+
+
+                        if self.commands[func_][1].get("argparse", True):
+                            text, args_ = self.parse_args(temp, self.commands[func_][0], func_)
+
+                            temp = message.reply(text)
+                            temp.args = args_
+
+                        args.append(temp)
             else:
                 raise Exception("unrecognised command: " + func)
 
         return funcs, args
 
+    def parse_args(self, message, func, funcname):
+        if hasattr(func, "_args"):
+            args = dict(func._args)
+        else:
+            args = {}
 
+        if message.text.startswith('"') and message.text.endswith('"'):
+            return message.data[1:-1], args
+
+        words = message.data.split()
+        msg = []
+
+        for word in words:
+            if word.startswith("--"):
+                word = word[2:]
+                if "=" in word:
+                    arg, _, value = word.partition("=")
+                    if arg not in args:
+                        raise Exception("invalid argument: %s for command %s" % (arg, funcname))
+                    values = {
+                        "True": True,
+                        "False": False,
+                    }
+                    if value in values:
+                        value = values[value]
+
+
+                    args[arg] = value
+                else:
+                    if word not in args:
+                        raise Exception("invalid argument: %s for command %s" % (word, funcname))
+                    args[word] = True
+            elif word.startswith("-"):
+                word = word[1:]
+                for flag in word:
+                    if flag not in args:
+                        raise Exception("invalid flag: %s for command %s" % (flag, funcname))
+            else:
+                msg.append(word)
+
+        return " ".join(msg), args
 
 
     def handle_inners(self, message):
@@ -248,7 +483,7 @@ class PiperBot(threading.Thread):
         for i, char in enumerate(rest):
             if prevchar+char == "$(":
                 openbr += 1
-            if char == ")":
+            if char == "$" and prevchar == ")":
                 if openbr != 0:
                     openbr -= 1
                 else:
@@ -258,7 +493,7 @@ class PiperBot(threading.Thread):
         else:
             raise Exception("no closing bracket")
 
-        middle = rest[:final]
+        middle = rest[:final-1]
         right = rest[final+1:]
 
         while "$(" in middle:
@@ -267,7 +502,6 @@ class PiperBot(threading.Thread):
         funcs, args = self.funcs_n_args(message.reply(middle))
         text = []
         cat = self.concater(text)
-        next(cat)
         pipe = cat
         for func, args in zip(funcs[::-1], args[::-1]):
             pipe = func(args, pipe)
@@ -276,12 +510,6 @@ class PiperBot(threading.Thread):
         pipe.close()
 
         return message.reply(text=left + " ".join(text) + right)
-
-
-    def call_trigger(self, func, message):
-        res = self.resulter()
-        next(res)
-        func(message, res)
 
     def send(self, message):
         if message.server in self.servers:
@@ -297,35 +525,39 @@ class PiperBot(threading.Thread):
         else:
             raise Exception("no such server: " + message.server)
 
-    def spamfilter(self, target):
-        spams = defaultdict(lambda: defaultdict(list))
+
+    @_coroutine
+    def argpass(self, arg, target):
+        formats = len(list(string.Formatter().parse(arg.text)))
         try:
             while 1:
                 x = yield
-                if x.params.startswith("#"):
-                    spams[x.server][x.params].append(x.text)
-                    if len(spams[x.server][x.params]) <= self.spamlimit:
-                        target.send(x)
-                else:
-                    spams[x.server][x.params].append(x.text)
-                    if len(spams[x.server][x.params]) <= self.pmspamlimit:
-                        target.send(x)
-        except GeneratorExit:
-            for server, messages in spams.items():
-                for channel, lines in messages.items():
-                    if channel.startswith("#"):
-                        spamlimit = self.spamlimit
+                if x is None:
+                    if not arg.text:
+                        target.send(None)
+                        print("sending None")
                     else:
-                        spamlimit = self.pmspamlimit
-                    if len(lines) > spamlimit:
-                        data = {'sprunge': '\n'.join(lines)}
-                        response = urllib.request.urlopen(urllib.request.Request('http://sprunge.us',
-                                                                                 urllib.parse.urlencode(data).encode(
-                                                                                     'utf-8'))).read().decode()
-                        print(channel, lines)
-                        target.send(Message(server=server, params=channel,command="PRIVMSG", text="spam detected, here is the output: %s" % response))
+                        target.send(arg)
+                        print("sending arg: %s" % arg)
+                else:
+                    if formats:
+                        if x.data is not None:
+                            print("replacing with %s" % x.data)
+                            target.send(x.reply(text=arg.text.format(*([x.data] * formats)), data=x.data))
+                        else:
+                            target.send(x.reply(text=arg.text.format(*([x.text] * formats)), data=x.data))
+                            print("replacing with %s" % x.text)
+                    else:
+                        text = arg.text
+                        if x.text:
+                            text += " " + x.text
+                        if not text:
+                            text = None
+                        target.send(x.reply(text=text, data=x.data))
+        except GeneratorExit:
             target.close()
 
+    @_coroutine
     def resulter(self):
         try:
             while 1:
@@ -334,19 +566,30 @@ class PiperBot(threading.Thread):
         except GeneratorExit:
             pass  # pipe closed
 
+    @_coroutine
     def concater(self, results):
         try:
             while 1:
                 x = yield
-                results.append(x.text)
+                results.append(x.data)
         except GeneratorExit:
             pass  # pipe closed
+
+
+
+
+
+
 
 
 if __name__ == "__main__":
     json_config = codecs.open(argv[1], 'r', 'utf-8-sig')
     config = json.load(json_config)
     bot = PiperBot()
+
+    if "apikeys" in config:
+        for api, key in config["apikeys"]:
+            bot.apikeys[api] = key
 
     for plugin_ in config["plugins"]:
         bot.load_plugin_from_module(plugin_)

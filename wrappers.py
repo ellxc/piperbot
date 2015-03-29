@@ -5,7 +5,7 @@ from multiprocessing import TimeoutError
 import functools
 import inspect
 import string
-
+from enum import IntEnum
 import dill
 
 
@@ -62,28 +62,31 @@ def command(name=None, simple=False, **kwargs):
             def generator(self, args, target):
                 def inner(target):
                     arg = args
-                    formats = len(list(string.Formatter().parse(arg.text)))
+                    formats = len(list(string.Formatter().parse(arg.data)))
                     try:
                         while True:
                             line = yield
                             if line is None:
-                                x = func(self, arg)
+                                if formats:
+                                    x = func(self, arg.reply(arg.data.format(*([""] * formats)), args=arg.args))
+                                else:
+                                    x = func(self, arg)
                             else:
                                 if formats:
                                     if line.data is not None:
-                                        x = func(self, line.reply(text=arg.text.format(*([line.data] * formats)), data=line.data))
+                                        x = func(self, line.reply(arg.data.format(*([line.data] * formats)), args=arg.args))
+                                        print("replacing with %s" % line.data)
                                     else:
-                                        x = func(self, line.reply(text=arg.text.format(*([line.text] * formats)), data=line.data))
+                                        x = func(self, line.reply(arg.data.format(*([line.text] * formats)), args=arg.args))
+                                        print("replacing with %s" % line.text)
                                 else:
-                                    x = func(self, line.reply(text=arg.text + (" " if arg.text else "") + line.text, data=line.data))
+                                    x = func(self, line.reply(arg.data + (" " if arg.data else "") + str(line.data), args=arg.args))
                             if x is not None:
                                 if inspect.isgenerator(x):
                                     for y in x:
-                                        if target is not None:
-                                            target.send(y)
+                                        target.send(y)
                                 else:
-                                    if target is not None:
-                                        target.send(x)
+                                    target.send(x)
                     except GeneratorExit:
                         if target is not None:
                             target.close()
@@ -99,6 +102,69 @@ def command(name=None, simple=False, **kwargs):
     else:
         return _coroutine
 
+class extensiontype(IntEnum):
+    command = 1
+    trigger = 2
+    event = 3
+    regex = 4
+
+def extension(priority=1, simple=False, type=1, **kwargs):
+    def _coroutine(func):
+
+        if hasattr(func, "_extensions"):
+            func._extensions.append((priority, type))
+            return func
+
+        func._extensions = []
+        func._extensions.append((priority, type))
+
+        if inspect.isgeneratorfunction(func) and not simple:
+            @functools.wraps(func)
+            def generator(self, original, target):
+                x = func(self, original, target)
+                next(x)
+                return x
+
+            return generator
+        else:
+            @functools.wraps(func)
+            def generator(self, original, target):
+                def inner(target):
+                    try:
+                        while True:
+                            line = yield
+                            if line is not None:
+                                x = func(self, line)
+                                if inspect.isgenerator(x):
+                                    for y in x:
+                                        target.send(y)
+                                else:
+                                    target.send(x)
+                    except GeneratorExit:
+                        target.close()
+
+                ret = inner(target)
+                next(ret)
+                return ret
+
+            return generator
+
+    return _coroutine
+
+
+
+def arg(arg=None, default=False):
+    def wrapper(func):
+        if not hasattr(func, '_args'):
+            func._args = {}
+        func._args[arg] = default
+        return func
+    if inspect.isfunction(arg):
+        raise Exception("no arg specified")
+    else:
+        return wrapper
+
+
 
 def regex(regex=None):
     def wrapper(func):
@@ -109,7 +175,8 @@ def regex(regex=None):
         func._regexes.append(re.compile(regex))
 
         @functools.wraps(func)
-        def generator(self, message, target):
+        def generator(self, target):
+            message = yield
             x = func(self, message)
             if x is not None:
                 if inspect.isgenerator(x):
@@ -135,7 +202,8 @@ def event(event_):
         func._handlers.append(event_)
 
         @functools.wraps(func)
-        def generator(self, message, target):
+        def generator(self, target):
+            message = yield
             x = func(self, message)
             if x is not None:
                 if inspect.isgenerator(x):
@@ -158,7 +226,8 @@ def trigger(trigger_=None):
         func._triggers.append(trigger_)
 
         @functools.wraps(func)
-        def generator(self, message, target):
+        def generator(self, target):
+            message = yield
             x = func(self, message)
             if x is not None:
                 if inspect.isgenerator(x):
@@ -173,6 +242,9 @@ def trigger(trigger_=None):
         raise Exception("no trigger specified")
     else:
         return wrapper
+
+
+
 
 
 def run_dill_encoded(what):
@@ -199,6 +271,10 @@ def _plugin__init__(self, bot):
     self._commands = []
     self._regexes = []
     self._handlers = []
+    self._command_extensions = []
+    self._event_extensions = []
+    self._trigger_extensions = []
+    self._regex_extensions = []
     for name, func in inspect.getmembers(self, predicate=inspect.ismethod):
         if hasattr(func, '_onLoad'):
             self._onLoads.append(func)
@@ -216,3 +292,13 @@ def _plugin__init__(self, bot):
         if hasattr(func, '_handlers'):
             for event in func._handlers:
                 self._handlers.append((event, func))
+        if hasattr(func, '_extensions'):
+            for priority, type in func._extensions:
+                if type == extensiontype.command:
+                    self._command_extensions.append((priority, func))
+                elif type == extensiontype.regex:
+                    self._regex_extensions.append((priority, func))
+                elif type == extensiontype.trigger:
+                    self._trigger_extensions.append((priority, func))
+                elif type == extensiontype.event:
+                    self._event_extensions.append((priority, func))

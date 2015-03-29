@@ -4,10 +4,10 @@ from Message import Message
 
 @plugin
 class regexes:
-    sedcommand = re.compile(r"^ *s([:/%|\!@,])((?:(?!\1)[^\\]|\\.)*)\1((?:(?!\1)[^\\]|\\.)*)\1([gi\d]*)(?: +(.+))?")
+    sedcommand = re.compile(r"^ *s([:/%|\!@,])((?:(?!\1)[^\\]|\\.)*)\1?((?:(?!\1)[^\\]|\\.)*)\1([gi\d]*)(?: +(.+))?")
     grepcommand = re.compile(r" */(.+)/([i]*)|(.+)")
 
-    @regex(r"^s([:/%|\!@,])((?:(?!\1)[^\\]|\\.)*)\1((?:(?!\1)[^\\]|\\.)*)\1([gi\d]*)(?: +(.+))?")
+    @regex(r"^s([:/%|\!@,])((?:(?!\1)[^\\]|\\.)*)\1((?:(?!\1)[^\\]|\\.)*)\1?([gi\d]*)(?: +(.+))?")
     def sedr(self, message):
         print(message.groups)
         delim, find, sub, flags, text = message.groups
@@ -24,7 +24,7 @@ class regexes:
                                                 **({"flags": re.IGNORECASE} if "i" in flags else {}))))
                 if matchobj:
                     text = msg.text
-                    if msg.action:
+                    if msg.ctcp == "ACTION":
                         action = True
                     break
             if not text:
@@ -48,7 +48,7 @@ class regexes:
             result = message.reply(timed(re.sub, args=(find, sub, text), kwargs=kwargs))
 
         if action:
-            result.action = True
+            result.ctcp = "ACTION"
         return result
 
 
@@ -68,14 +68,12 @@ class regexes:
                 x = yield
                 if x is None:
                     if not text:
-                        for msg in list(self.bot.message_buffer[x.server][x.params])[1:]:
+                        for msg in list(self.bot.message_buffer[arg.server][arg.params])[1:]:
                             matchobj = timed(lambda:
                                              bool(re.search(find, msg.text,
                                                             **({"flags": re.IGNORECASE} if "i" in flags else {}))))
                             if matchobj:
                                 text = msg.text
-                                if msg.action:
-                                    action = True
                                 break
                         if not text:
                             raise Exception("No text and no matching message found")
@@ -121,33 +119,34 @@ class regexes:
                 flags = {}
             reg = re.compile(reg, **flags)
         try:
+            if reg:
+                while 1:
+                    x = yield
+                    if x is None:
+                        found = False
+                        for msg in list(self.bot.message_buffer[arg.server][arg.params])[1:][::-1]:
+                            if timed(lambda: bool(reg.search(msg.text))):
+                                target.send(msg.copy())
+                                found = True
+                        if not found:
+                            raise Exception("no messages found")
+                    else:
+                        if timed(lambda: bool(reg.search(x.text))):
+                            target.send(x)
             while 1:
                 x = yield
                 if x is None:
                     found = False
                     for msg in list(self.bot.message_buffer[arg.server][arg.params])[1:][::-1]:
-                            if reg:
-                                matchobj = timed(lambda:
-                                                 bool(reg.search(msg.text)))
-                                if matchobj:
-                                    target.send(msg.copy())
-                                    found = True
-                            else:
-                                if ftext in msg.text:
-                                    target.send(msg.copy())
-                                    found = True
+                        if ftext in msg.text:
+                            target.send(msg.copy())
+                            found = True
 
                     if not found:
                         raise Exception("no messages found")
                 else:
-                    if reg:
-                        matchobj = timed(lambda:
-                                         bool(reg.search(x.text)))
-                        if matchobj:
-                            target.send(x)
-                    else:
-                        if ftext in x.text:
-                            target.send(x)
+                    if ftext in x.text:
+                        target.send(x)
         except GeneratorExit:
             target.close()
 

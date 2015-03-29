@@ -19,6 +19,11 @@ class AdminTools:
         temp.command = "NOTICE"
         return temp
 
+    @command("unalias", adminonly=True)
+    def delalias(self, message):
+        assert len(message.data.split()) == 1
+
+
 
     @command("join", adminonly=True, simple=True)
     def join(self, message):

@@ -13,6 +13,35 @@ class Users:
                 self.bot.ops[message.server][message.params.split()[-1]].add(nick)
             self.bot.users[message.server][nick].channels[message.server].append(message.params.split()[-1])
 
+    @event("JOIN")
+    def onjoin(self, message):
+        if message.nick.startswith("+"):
+            nick = message.nick[1:]
+        elif message.nick.startswith("@"):
+            nick = message.nick[1:]
+            self.bot.ops[message.server][message.params.split()[-1]].add(nick)
+        else:
+            nick = message.nick
+
+        self.bot.users[message.server][nick].channels[message.server].append(message.params.split()[-1])
+
+    @event("PART")
+    def onpart(self, message):
+        if message.nick.startswith("+"):
+            nick = message.nick[1:]
+        elif message.nick.startswith("@"):
+            nick = message.nick[1:]
+            self.bot.ops[message.server][message.params.split()[-1]].remove(nick)
+        else:
+            nick = message.nick
+        self.bot.users[message.server][nick].channels[message.server].remove(message.params.split()[-1])
+
+    @event("QUIT")
+    def onquit(self, message):
+        self.bot.users[message.server][message.nick].channels[message.server] = []
+
+
+
     @command("channels")
     def channels(self, message):
         if len(message.text.split()) == 1:
@@ -22,3 +51,10 @@ class Users:
         elif len(message.text.split()) == 0:
             return message.reply("I see you in these channels: " +
                                 ", ".join(self.bot.users[message.server][message.nick].channels[message.server]))
+
+    @command("nicks", simple=True)
+    def nicks(self, message):
+        for nick, user in self.bot.users[message.server].items():
+            if message.params in user.channels[message.server]:
+                yield message.reply(nick)
+

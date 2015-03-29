@@ -1,5 +1,5 @@
 from wrappers import *
-
+import time
 
 @plugin(desc="testing module 1234")
 class testing1:
@@ -27,8 +27,20 @@ class testing2:
 
     @regex("^<(.*?)>$")
     def regextest(self, message):
-        return message.reply(message.groups[0])
+        return message.reply(message.groups)
 
     @command("admin", adminonly=True)
     def admin(self, message):
         return message.reply("yes {}, you are an admin!".format(message.nick))
+
+
+    @command("time")
+    def timer(self, arg, target):
+        start = time.perf_counter()
+        try:
+            while 1:
+                x = yield
+        except GeneratorExit:
+            total = time.perf_counter() - start
+            target.send(arg.reply(total, "took %s seconds" % total))
+            target.close()

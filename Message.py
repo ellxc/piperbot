@@ -4,62 +4,54 @@ import re
 
 
 SPLIT_REGEX = r"^(?::(?:(?:(?P<nick>\S+)!)?(?:(?P<user>\S+)@)?(?P<domain>\S+) +))?" \
-              r"(?P<command>\S+)(?: +(?!:)(?P<params>.+?))?(?: *:(?P<action>\x01ACTION )?(?P<text>.+?))?\x01?$"
+              r"(?P<command>\S+)(?: +(?!:)(?P<params>.+?))?(?: *:(?:\x01(?P<CTCP>\w+) )?(?P<text>.+?))?\x01?$"
 
 
 class Message():
-    def __init__(self, server=None, nick="", user="", domain="", command="", params="", action="", text=None
-                 , timestamp=None, groups=None, data=None):
+    def __init__(self, server=None, nick="", user="", domain="", command="", params="", ctcp="", text=None
+                 , timestamp=None, groups=None, data=None, args=None):
         self.server = server
         # self.channel = channel
         self.nick = nick
         self.user = user
         self.domain = domain
-        self._command = command
+        self.command = command
         self.params = params
-        self.action = action
-        self._text = text
+        self.ctcp = ctcp
+        if ctcp:
+            print(ctcp)
+            self.command = ctcp
+        self.text = text
         self.timestamp = timestamp or datetime.datetime.now()
         self.groups = groups
-        self._data = data
+        self.data = data
+        self.args = args
 
 
 
     @property
     def text(self):
         if self._text is None:
-            if self._data is not None:
-                return repr(self.data)
-            else:
-                return ""
+            if self.data is not None:
+                return str(self.data)
+            return ""
         return self._text
 
     @text.setter
     def text(self, val):
         if val:
-            if val.startswith("\001ACTION"):
-                val = val[6:]
-                self.action = True
-
+            if val.startswith("\001"):
+                cmd, *val = val.split(" ")
+                val = " ".join(val)
+                self.ctcp = cmd
                 if val.endswith("\001"):
                     val = val[:-1]
-
         self._text = val
 
-    @property
-    def data(self):
-        if self._data is None:
-            if self._text is not None:
-                return self._text
-        return self._data
-
-    @data.setter
-    def data(self, val):
-        self._data = val
 
     @property
     def command(self):
-        if self._command == "ACTION":
+        if self._command == self.ctcp:
             return "PRIVMSG"
         else:
             return self._command
@@ -71,23 +63,23 @@ class Message():
     def to_line(self):
         text = self.text.replace("\r", "").replace("\n", "")
         return "%s %s :%s%s%s" % (
-            self.command, self.params, ("\001ACTION " if self.action else ""), text[:200],
-            ("\001" if self.action else ""))
+            self.command, self.params, ("\001%s " % self.ctcp if self.ctcp else ""), text,
+            ("\001" if self.ctcp else ""))
 
     def to_pretty(self):
         text = self.timestamp.strftime("%x %X")
         text += " "
-        if self.action:
+        if self.ctcp:
             text += " * %s " % self.nick
         else:
             text += "< %s> " % self.nick
         text += self.text.rstrip("\n")
         return text
 
-    def reply(self, text=None, data=None):
+    def reply(self, data=None, text=None, args=None):
         return Message(server=self.server, nick=self.nick, command=self.command,
-                       domain=self.domain, action=self.action, groups=self.groups, user=self.user,
-                       params=self.params, text=text, data=data)
+                       domain=self.domain, ctcp=self.ctcp, groups=self.groups, user=self.user,
+                       params=self.params, text=text, data=data, args=args)
 
     def copy(self):
         return copy.copy(self)
@@ -100,16 +92,16 @@ class Message():
         return "{}: {}{} {} {}:{}".format(self.server, str(self.timestamp)[:-7],
                                           (" <" + self.nick + "(" + self.user + ("@" if self.user else "")
                                            + self.domain + ")>")
-                                          if self.domain else "", "ACTION " if self.action else self.command,
+                                          if self.domain else "", self.ctcp if self.ctcp else self.command,
                                           self.params, self.text)
 
 
     @staticmethod
-    def from_line(line):
+    def from_line(line, server):
         if not line:
             return
         else:
-            return Message("", *re.match(SPLIT_REGEX, line).groups(""))
+            return Message(server, *re.match(SPLIT_REGEX, line).groups(""))
 
     @staticmethod
     def is_ping(msg, bot):

@@ -26,9 +26,9 @@ class Karma:
     @regex(r"(?:\[([^\[\]]+)\]|(\S+))(\+\+|--)")
     def mod(self, message):
         if message.nick != (message.groups[0] or message.groups[1]):
-            self.karma[message.groups[0] or message.groups[1]] += {"++": 1, "--": -1}[message.groups[2]]
+            self.karma[(message.groups[0] or message.groups[1]).lower()] += {"++": 1, "--": -1}[message.groups[2]]
 
-    @command("karma")
+    @command("karma", simple=True)
     def asd(self, message):
         """shows you your karma or the specified object's karma, karma is gained incrementing or decrementing an object. like so Penguin++"""
         if message.text:
@@ -37,10 +37,10 @@ class Karma:
                 if key not in checked:
                     checked.add(key)
                     score = self.karma[key.lower()]
-                    return message.reply("{} has {} karma!".format(key, score or "no"), score)
+                    yield message.reply((key, score), "{} has {} karma!".format(key, score or "no"))
         else:
             key = message.nick
             score = self.karma[key.lower()]
-            return message.reply("you have {} karma!".format(score or "no"), score)
+            yield message.reply((key, score), "you have {} karma!".format(score or "no"))
 
 

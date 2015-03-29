@@ -1,13 +1,13 @@
 import codecs
 import urllib.request
 import urllib.parse
-
+import pymongo
 from wrappers import *
 
 
 @plugin(desc="general")
 class general():
-    itersplit = re.compile(r'(?:"[^"]*"|[^ ]+)')
+    itersplit = re.compile(r'"([^"]*)"|([^ ]+)')
 
     @command  # (groups="^(\S+)?$")
     def pm(self, arg, target):
@@ -23,10 +23,23 @@ class general():
             target.close()
 
 
+    @command("repeat", simple=True)
+    def rep(self, message):
+        cnt, *msg = message.text.split()
+        cnt = int(cnt)
+        if cnt > 100:
+            raise Exception("too many")
+        for i in range(int(cnt)):
+            yield message.reply(" ".join(msg))
+
     @command("iterate", simple=True)
     def iter(self, message):
-        for x in self.itersplit.finditer(message.text):
-            yield message.reply(x.group(0))
+        if isinstance(message.data, str):
+            for x in self.itersplit.finditer(message.data):
+                yield message.reply(x.group(1) or x.group(2))
+        else:
+            for x in message.data:
+                yield message.reply(x)
 
     @command("reverse")
     def reverse(self, message):
@@ -36,33 +49,33 @@ class general():
     @command("echo")
     def echo(self, message):
         "repeats the input, useful for formatting"
-        return message.reply(message.text, data=message.data)
+        return message.reply(message.data)
 
     @command("caps")
     @command("upper")
     def uper(self, message):
         "turns the message into upper case"
-        return message.reply(message.text.upper())
+        return message.reply(message.data.upper())
 
     @command("lower")
     def lower(self, message):
         "turns the message into lower case"
-        return message.reply(message.text.lower())
+        return message.reply(message.data.lower())
 
     @command("rot13")
     def rot13(self, message):
         "applies rot13 to the message"
-        return message.reply(codecs.encode(message.text, 'rot_13'))
+        return message.reply(codecs.encode(message.data, 'rot_13'), codecs.encode(message.text, 'rot_13'))
 
     @command("camel")
     def camel(self, message):
         "turns the message into camel case"
-        return message.reply(message.text.title())
+        return message.reply(message.data.title())
 
     @command("list")
     def list(self, message):
         "list the loaded plugins"
-        return message.reply("loaded plugins : " + ", ".join(self.bot.plugins.keys()))
+        return message.reply(list(self.bot.plugins.keys()), "loaded plugins : " + ", ".join(self.bot.plugins.keys()))
 
     @command("help", simple=True)
     def help(self, message):
@@ -70,12 +83,12 @@ class general():
            derp derp derp
 
         """
-        if message.data is not None and message._text is None:
+        if not isinstance(message.data, str):
             yield message.reply(
                 text="not yet implemented pydoc look up. this is a %s" % message.data.__class__.__name__)
         else:
             try:
-                com = message.text.split()[0]
+                com = message.data.split()[0]
                 func = self.bot.commands[com][0]
             except:
                 raise Exception("specifed command not found")
@@ -90,7 +103,21 @@ class general():
     @command
     def strip(self, message):
         "strip the message of any whitespace"
-        return message.reply(message.text.strip())
+        return message.reply(message.data.strip())
+
+    @command
+    def split(self, arg, target):
+        splitby = arg.text or " "
+        try:
+            while 1:
+                x = yield
+                if x is None:
+                    target.send(arg.reply(arg.data.split()))
+                else:
+                    target.send(x.reply(x.data.split(splitby)))
+        except GeneratorExit:
+            target.close()
+
 
     @command
     def quote(self, message):
@@ -104,7 +131,7 @@ class general():
         count = len(lines)
         lines = "\n".join([x.to_pretty() for x in lines])
 
-        return message.reply("captured %s lines!" % count, data=lines)
+        return message.reply(lines, "captured %s lines!" % count)
 
     @command
     def sprunge(self, arg, target):
@@ -124,23 +151,22 @@ class general():
                 response = urllib.request.urlopen(urllib.request.Request('http://sprunge.us',
                                                                          urllib.parse.urlencode(data).encode(
                                                                              'utf-8'))).read().decode()
-                target.send(arg.reply(text=response))
+                target.send(arg.reply(response))
             target.close()
 
     @command
     def cat(self, arg, target):
         """concat all messages to one line joined by arg.text or ' '"""
-        lines = []
-        joiner = arg.text or " "
+        data = []
         try:
             while 1:
                 x = yield
                 if x is None:
                     pass
                 else:
-                    lines.append(str(x.text))
+                    data.append(x.data)
         except GeneratorExit:
-            target.send(arg.reply(text=joiner.join(lines)))
+            target.send(arg.reply(data))
             target.close()
 
     @command
@@ -152,9 +178,36 @@ class general():
                 if x is None:
                     pass
                 else:
-                    count+=1
+                    count += 1
         except GeneratorExit:
-            target.send(arg.reply(data=count))
+            target.send(arg.reply(count))
             target.close()
 
+    @command("expand")
+    def expand(self, message):
+        if message.text:
+            command = message.text.split()[0].strip()
+            if command in self.bot.aliases:
+                x = self.bot.aliases[command]
+                x = self.bot.command_char+" || ".join(["%s%s" % (cmd, (" " + arg) if arg else "") for cmd, arg in x])
+                return message.reply(x)
 
+
+    @on_load
+    def alaiasload(self):
+        con = pymongo.MongoClient()
+        db = con.Marvin
+        for record in db["aliases"].find():
+            self.bot.aliases[record["key"]] = record["command"]
+
+    @on_unload
+    def aliassave(self):
+        con = pymongo.MongoClient()
+        db = con.Marvin
+        for key, cmd in self.bot.aliases.items():
+            db.aliases.insert({"key": key, "command": cmd})
+
+
+    @regex("^.?botsnack")
+    def botsnack(self, message):
+        return message.reply("am I supposed to be impressed by this offering?")
