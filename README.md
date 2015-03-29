@@ -6,10 +6,12 @@ A multithreaded, multi-server IRC bot written in Python.
 Pre-requisites
 --------------
 
- * Python 3.x
+ * Python 3.4
  * MongoDB for the mongo backend.
  * dill for various things related to pickling and multiproccess
  * dateutil for reminders
+ * requests for sane html stuff
+ * lxml for sane html parsing
  * patience it might not work completely...
  
 Running
@@ -18,7 +20,7 @@ Running
 To run PiperBot, edit the `settings.json` file with your own settings, and do
 
 ```
-python3.3 piperbot.py settings.json
+python3.4 piperbot.py settings.json
 ```
 
 Plugins
@@ -28,16 +30,15 @@ List of available plugins and their funtion
 
 ### `general`
 General functions of the bot.
-  - `@command("reverse")` : Reverse piped text
-  - `@command("echo")` : Print piped text
-  - `@command("caps")` : UPPERCASE piped text
-  - `@command("lower")` : lowercase piped text
-  - `@command("rot13")` : Ceaser shift 13 piped text
-  - `@command("binary")` : Attempt to print a number in binary notation
-  - `@command("hex")` : Attempt to print a number in hexadecimal notation
-  - `@command("list")` : List the loaded plugins
-  - `@command("sed")` : Does a sed replace on text. Searches for a match for the
-	1st operand of the regex in previous messages seen reverse chronologically.
+  - `#echo <text>` : echo format the text with any piped data, or just echo the text
+  - `#reverse <text>` : reverse piped data or the text
+  - `#caps <text>` : UPPERCASE piped text
+  - `#lower <text>` : lowercase piped text
+  - `#rot13 <text>` : Ceaser shift 13 piped text
+  - `#list` : List the loaded plugins
+  - `#sed <sed pattern> <text>` : Does a sed replace on text. Searches for a match for the 1st operand of the regex in previous messages seen reverse chronologically.
+  - `#help <command>` for more in-depth help on a command
+  - lots more
 
 ### `markov`
 Talks.
