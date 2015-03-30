@@ -19,7 +19,6 @@ class Message():
         self.params = params
         self.ctcp = ctcp
         if ctcp:
-            print(ctcp)
             self.command = ctcp
         self.text = text
         self.timestamp = timestamp or datetime.datetime.now()

@@ -85,7 +85,7 @@ class PiperBot(threading.Thread):
                 messgages = buffer
             if match_object.group(3):
                 count = int(match_object.group(3))
-            elif match_object.group(4):
+            else:
                 count = len(match_object.group(4))
             if count <= len(messgages):
                 return (" " if match_object.group(2) else "") + messgages[count - 1].text
@@ -333,7 +333,7 @@ class PiperBot(threading.Thread):
             self.send(message.reply(type(e).__name__ + (": " + str(e)) if str(e) else ""))
             exc_type, exc_value, exc_traceback = sys.exc_info()
             print("*** print_tb:")
-            traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
+            traceback.print_tb(exc_traceback, file=sys.stdout)
 
 
 
@@ -373,7 +373,7 @@ class PiperBot(threading.Thread):
             self.send(message.reply(type(e).__name__ + (": " + str(e)) if str(e) else ""))
             exc_type, exc_value, exc_traceback = sys.exc_info()
             print("*** print_tb:")
-            traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
+            traceback.print_tb(exc_traceback, file=sys.stdout)
 
 
     def funcs_n_args(self, message):
@@ -383,8 +383,7 @@ class PiperBot(threading.Thread):
         args = []
         for i, (func, arg) in enumerate(commands):
             if func in self.commands:
-                if self.commands[func][1].get("adminonly", False) and \
-                                message.nick not in self.admins[message.server]:
+                if self.commands[func][1].get("adminonly", False) and message.nick not in self.admins[message.server]:
                     raise Exception("admin only command: " + func)
                 else:
                     funcs.append(self.commands[func][0])
@@ -406,8 +405,8 @@ class PiperBot(threading.Thread):
 
 
                 for func_, arg_ in self.aliases[func]:
-                    if self.commands[func_][1].get("adminonly", False) and \
-                                    message.nick not in self.admins[message.server]:
+                    if self.commands[func_][1].get("adminonly", False) \
+                            and message.nick not in self.admins[message.server]:
                         raise Exception("admin only command: " + func)
                     else:
                         funcs.append(self.commands[func_][0])
@@ -535,18 +534,14 @@ class PiperBot(threading.Thread):
                 if x is None:
                     if not arg.text:
                         target.send(None)
-                        print("sending None")
                     else:
                         target.send(arg)
-                        print("sending arg: %s" % arg)
                 else:
                     if formats:
                         if x.data is not None:
-                            print("replacing with %s" % x.data)
                             target.send(x.reply(text=arg.text.format(*([x.data] * formats)), data=x.data))
                         else:
                             target.send(x.reply(text=arg.text.format(*([x.text] * formats)), data=x.data))
-                            print("replacing with %s" % x.text)
                     else:
                         text = arg.text
                         if x.text:

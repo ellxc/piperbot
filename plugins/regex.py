@@ -9,7 +9,6 @@ class regexes:
 
     @regex(r"^s([:/%|\!@,])((?:(?!\1)[^\\]|\\.)*)\1((?:(?!\1)[^\\]|\\.)*)\1?([gi\d]*)(?: +(.+))?")
     def sedr(self, message):
-        print(message.groups)
         delim, find, sub, flags, text = message.groups
 
         sub = re.sub(r"\\" + delim, delim, sub)
@@ -111,7 +110,6 @@ class regexes:
     @command("grep")
     def regex(self, arg, target):
         reg, flags, ftext = self.grepcommand.match(arg.text).groups()
-        print(reg, flags, ftext)
         if reg:
             if "i" in flags:
                 flags = {"flags": re.IGNORECASE}
