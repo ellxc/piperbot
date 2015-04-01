@@ -75,12 +75,10 @@ def command(name=None, simple=False, **kwargs):
                                 if formats:
                                     if line.data is not None:
                                         x = func(self, line.reply(arg.data.format(*([line.data] * formats)), args=arg.args))
-                                        print("replacing with %s" % line.data)
                                     else:
-                                        x = func(self, line.reply(arg.data.format(*([line.text] * formats)), args=arg.args))
-                                        print("replacing with %s" % line.text)
+                                        x = func(self, line.reply(arg.data.format(*([""] * formats)), args=arg.args))
                                 else:
-                                    x = func(self, line.reply(arg.data + (" " if arg.data else "") + str(line.data), args=arg.args))
+                                    x = func(self, line.reply(line.data, args=arg.args))
                             if x is not None:
                                 if inspect.isgenerator(x):
                                     for y in x:

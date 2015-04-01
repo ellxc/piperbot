@@ -34,12 +34,8 @@ class general():
 
     @command("iterate", simple=True)
     def iter(self, message):
-        if isinstance(message.data, str):
-            for x in self.itersplit.finditer(message.data):
-                yield message.reply(x.group(1) or x.group(2))
-        else:
-            for x in message.data:
-                yield message.reply(x)
+        for x in message.data:
+            yield message.reply(x)
 
     @command("reverse")
     def reverse(self, message):

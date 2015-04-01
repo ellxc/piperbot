@@ -16,7 +16,6 @@ class ServerConnection():
     def __init__(self, queue, name, network, port, nick, password=None, username=None, ircname=None,
                  auto_join_channels=None, ssl=False):
         self.in_queue = queue
-        self.out_queue = PriorityQueue()
         self.connected = False
         self.name = name
         self.network = network
@@ -27,8 +26,6 @@ class ServerConnection():
         self.ircname = ircname or nick
         self.password = password
         self.auto_join_channels = auto_join_channels if auto_join_channels else []
-
-        self.handlers = dict()
 
         self.socket = socket.socket()
         if self.ssl:
@@ -59,8 +56,6 @@ class ServerConnection():
             self.socket = serverconnection.socket
             self.in_queue = serverconnection.in_queue
             self.server_name = serverconnection.name
-            self.message_splitter = re.compile(SPLIT_REGEX)
-            self.handlers = serverconnection.handlers
             self.onError = serverconnection.reconnect
             self.serverconnection = serverconnection
 
@@ -75,9 +70,9 @@ class ServerConnection():
                             lines = data.strip().split("\r\n")
                             for line in lines:
                                 if line:
-                                    msg = Message.from_line(line,self.server_name)#  self.server_name, *self.message_splitter.match(line).groups(""))
+                                    msg = Message.from_line(line, self.server_name)
                                     if msg.command == "PRIVMSG" and msg.params == self.serverconnection.nick:
-                                        msg.params = msg.nick
+                                        msg.params = msg.nick  # account for prviate messages
                                     self.in_queue.put(msg)
                         except Exception as e:
                             print("ERROR IN " + self.name + " INTHREAD, " + str(e))

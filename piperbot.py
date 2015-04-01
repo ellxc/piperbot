@@ -171,7 +171,6 @@ class PiperBot(threading.Thread):
         for (func, args) in plugin_instance._commands:
             if args["command"] not in self.commands:
                 self.commands[args["command"]] = (func, args)
-                print("loaded command: ", args["command"])
             else:
                 print("command overlap! : " + args["command"])
 
@@ -352,7 +351,7 @@ class PiperBot(threading.Thread):
 
             for _, _, f in self.pre_command_exts:
                 prepipe = f(message, prepipe)
-            prepipe.send(None)
+            prepipe.send(message)
 
             for result in results:
 
@@ -532,23 +531,21 @@ class PiperBot(threading.Thread):
             while 1:
                 x = yield
                 if x is None:
-                    if not arg.text:
+                    if not arg.data:
                         target.send(None)
                     else:
-                        target.send(arg)
+                        if formats:
+                            target.send(arg.reply(data=arg.data.format(*([""] * formats)), args=arg.args))
+                        else:
+                            target.send(arg)
                 else:
                     if formats:
                         if x.data is not None:
-                            target.send(x.reply(text=arg.text.format(*([x.data] * formats)), data=x.data))
+                            target.send(x.reply(data=arg.data.format(*([x.data] * formats)), args=arg.args))
                         else:
-                            target.send(x.reply(text=arg.text.format(*([x.text] * formats)), data=x.data))
+                            target.send(x.reply(data=arg.data.format(*([""] * formats)), args=arg.args))
                     else:
-                        text = arg.text
-                        if x.text:
-                            text += " " + x.text
-                        if not text:
-                            text = None
-                        target.send(x.reply(text=text, data=x.data))
+                        target.send(x.reply(data=x.data, args=arg.args))
         except GeneratorExit:
             target.close()
 

@@ -126,28 +126,25 @@ class Reminders(Thread):
 
     @command
     def remind(self, arg, target):
-        """ remind <target> (in|at|on) (quantiy unit|datetime) to (message) -> sets a reminder, also accepts a piped in datetime or timedelta objects or a timestamp
+        """ remind <target> (in|at|on) (quantiy unit|datetime) to (message) -> sets a reminder, also accepts a piped in datetime, timedelta or string objects
         :param message:
         :return message:
         """
         try:
             while 1:
                 message = yield
+                if message is None:
+                    message = arg
+                setfor = message.nick
+                print(message.data)
                 if isinstance(message.data, datetime.datetime):
-                    self.reminders.append(reminder(arg.nick, arg.nick, datetime.datetime.today(),
-                                                   message.data, arg.data or "", arg.params,
-                                                   arg.server))
-                    self.reminders.sort()
-                    self.event.set()
-                    return message.reply("reminder set for %s!" % str(message.data))
+                    settime = message.data
+                    settext = arg.data
+                    responsetext = "reminder set for %s!" % str(message.data)
                 elif isinstance(message.data, datetime.timedelta):
-                    self.reminders.append(reminder(arg.nick, arg.nick, datetime.datetime.today(),
-                                                   datetime.datetime.today() + message.data, arg.data or "",
-                                                   arg.params,
-                                                   arg.server))
-                    self.reminders.sort()
-                    self.event.set()
-                    return message.reply("reminder set to go in %s!" % str(message.data))
+                    settime = datetime.datetime.today() + message.data
+                    settext = arg.data
+                    responsetext = "reminder set to go in %s!" % str(message.data)
                 elif isinstance(message.data, str):
                     if message.data.split()[1:2] == ["in"]:
                         try:
@@ -173,41 +170,40 @@ class Reminders(Thread):
 
                         total = quant * unit
 
-                        date = datetime.datetime.now() + datetime.timedelta(seconds=total)
+                        settime = datetime.datetime.now() + datetime.timedelta(seconds=total)
 
                         if setfor == "me":
                             setfor = message.nick
-                        self.reminders.append(reminder(message.nick, setfor, datetime.datetime.today(),
-                                                       date, msg or "", message.params,
-                                                       message.server))
-                        self.reminders.sort()
-                        self.event.set()
-                        return message.reply("reminder set to go in %s!" % str(datetime.timedelta(seconds=total)))
+
+                        settext = msg or arg.data
+                        responsetext = "reminder set to go in %s!" % str(datetime.timedelta(seconds=total))
                     elif message.text.split()[1:2] == ["at"] or message.text.split()[1:2] == ["on"]:
                         date, *msg = message.text[3:].split("to ")
-                        date = parser.parse(date, fuzzy=True)
+                        settime = parser.parse(date, fuzzy=True)
                         msg = "to ".join(msg)
                         setfor = message.text.split()[0]
                         if setfor == "me":
                             setfor = message.nick
-                        self.reminders.append(reminder(message.nick, setfor, datetime.datetime.today(),
-                                                       date, msg or "", message.params,
-                                                       message.server))
-                        self.reminders.sort()
-                        self.event.set()
-                        return message.reply("reminder set for %s!" % str(date))
+
+                        settext = msg or arg.data
+                        responsetext = "reminder set for %s!" % str(settime)
                     else:
+                        try:
+                            settime = parser.parse(message.data)
+                            responsetext = "reminder set for %s!" % str(settime)
+                            settext = arg.data if message != arg else ""
+                        except:
+                            target.send(message.reply("sorry I didn't understand, try %shelp remind"
+                                                      % self.bot.command_char))
+                            continue
 
-
-                        self.reminders.append(reminder(message.nick, message.nick, datetime.datetime.today(),
-                                                       datetime.datetime.today() + datetime.timedelta(0, 10), "",
-                                                       message.params,
-                                                       message.server))
-                        self.reminders.sort()
-                        self.event.set()
-                        return message.reply("10 second reminder set!")
-                else:
-                    raise TypeError("expected a datetime or timedelta object")
+                self.reminders.append(reminder(arg.nick, setfor, datetime.datetime.today(),
+                                               settime, settext,
+                                               message.params,
+                                               message.server))
+                self.reminders.sort()
+                self.event.set()
+                target.send(message.reply(data=settime, text=responsetext))
         except GeneratorExit:
             target.close()
 

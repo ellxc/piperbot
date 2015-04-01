@@ -54,7 +54,6 @@ class Users:
 
     @command("nicks", simple=True)
     def nicks(self, message):
-        for nick, user in self.bot.users[message.server].items():
-            if message.params in user.channels[message.server]:
-                yield message.reply(nick)
+        nicks = [nick for nick, user in self.bot.users[message.server].items() if message.params in user.channels[message.server]]
+        yield message.reply(data=nicks, text=" ".join(nicks))
 

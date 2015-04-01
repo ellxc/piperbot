@@ -75,9 +75,9 @@ class Message():
         text += self.text.rstrip("\n")
         return text
 
-    def reply(self, data=None, text=None, args=None):
+    def reply(self, data=None, text=None, args=None, ctcp=None):
         return Message(server=self.server, nick=self.nick, command=self.command,
-                       domain=self.domain, ctcp=self.ctcp, groups=self.groups, user=self.user,
+                       domain=self.domain, ctcp=self.ctcp if ctcp is None else ctcp, groups=self.groups, user=self.user,
                        params=self.params, text=text, data=data, args=args)
 
     def copy(self):
@@ -101,59 +101,3 @@ class Message():
             return
         else:
             return Message(server, *re.match(SPLIT_REGEX, line).groups(""))
-
-    @staticmethod
-    def is_ping(msg, bot):
-        return msg.command == "PING"
-
-    @staticmethod
-    def is_kick(msg, bot):
-        return msg.command == "KICK"
-
-    @staticmethod
-    def is_nick(msg, bot):
-        return msg.command == "NICK"
-
-    @staticmethod
-    def is_quit(msg, bot):
-        return msg.command == "QUIT"
-
-    @staticmethod
-    def is_join(msg, bot):
-        return msg.command == "JOIN"
-
-    @staticmethod
-    def is_mode(msg, bot):
-        return msg.command == "MODE"
-
-    @staticmethod
-    def is_part(msg, bot):
-        return msg.command == "PART"
-
-    @staticmethod
-    def is_topic(msg, bot):
-        return msg.command == "TOPIC"
-
-    @staticmethod
-    def is_invite(msg, bot):
-        return msg.command == "INVITE"
-
-    @staticmethod
-    def is_notice(msg, bot):
-        return msg.command == "NOTICE"
-
-    @staticmethod
-    def is_message(msg, bot):
-        return msg.command == "PRIVMSG" and any(map(msg.params.startswith, ["#", "&", "!", "+", "~"]))
-
-    @staticmethod
-    def is_private_message(msg, bot):
-        return msg.command == "PRIVMSG" and not any(map(msg.params.startswith, ["#", "&", "!", "+", "~"]))
-
-    @staticmethod
-    def is_action(msg, bot):
-        return Message.is_message(msg, bot) and msg.text.startswith("\001ACTION")
-
-    @staticmethod
-    def is_private_action(msg, bot):
-        return Message.is_private_message(msg, bot) and msg.text.startswith("\001ACTION")

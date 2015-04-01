@@ -34,7 +34,7 @@ units = [
 
 
 
-metadata_regex = re.compile('(?:\/(\w+)\s?\(([^\n\r]*)\)\n?\r?)', re.S)
+metadata_regex = re.compile('(?:/(\w+)\s?\(([^\n\r]*)\)\n?\r?)', re.S)
 
 def read_pdf_metadata(url):
     request = requests.get(url, stream=True)
@@ -81,7 +81,7 @@ def size(bytes):
             suffix = multiple
     return format(amount,".2f") + suffix
 
-youtuberegex = re.compile(r".*v=([^&]+?)(?:&.*)?$")
+youtuberegex = re.compile(r"(?:.*v=|https://youtu\.be\/)([^&]+?)(?:[\/&].*)?$")
 
 def youtube(url):
     # http://gdata.youtube.com/feeds/api/videos/
@@ -160,7 +160,8 @@ websitehandlers = {
             r".*\.wikipedia\.org": wikipediaparse,
             r"www\.urbandictionary\.com\/define": urbandictionaryparse,
             r"imgur\.com/.+\..+": imgur,
-            r"youtube\.com/watch\?v=": youtube,
+            r"youtube\.com/watch\?.+v=": youtube,
+            r"youtu\.be/.+": youtube,
             r"\.pdf": read_pdf_metadata,
         }
 
@@ -168,42 +169,44 @@ websitehandlers = {
 @plugin
 class url:
 
-    @regex(r"^.*((?:http[s]?://|www)(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)")
+    @regex(r"((?:http[s]?://|www)(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)")
     def url(self, message):
-        link = message.groups
+        if message.text[0] not in "!#.$%":
 
-        if not link.startswith("http"):
-            link = "http://"+link
+            link = message.groups
+
+            if not link.startswith("http"):
+                link = "http://"+link
 
 
-        for pattern, handler in websitehandlers.items():
-            if re.search(pattern, link):
-                for response in handler(link):
-                    return message.reply(response)
+            for pattern, handler in websitehandlers.items():
+                if re.search(pattern, link):
+                    for response in handler(link):
+                        return message.reply(response)
 
-        headers = requests.head(link, timeout=5)
-        print(headers.status_code)
-        contentstats = ""
-        if "content-type" in headers.headers:
-            contentstats += headers.headers["content-type"]
-        if "content-length" in headers.headers:
-            try:
-                length = size(int(headers.headers["content-length"]))
-            except:
-                length = "0B"
-            contentstats += "; " + length
-        if "html" in contentstats.lower():
-            page = requests.get(link, stream=True)
-            for chunk in page.iter_content(chunk_size=4096):
-                brokenhtml = lxml.html.fromstring(chunk)
-                title = brokenhtml.xpath("//title/text()")
-                if title:
-                    title = "Title: " + title[0].strip().replace("\n", "")
-                    if headers.status_code in [301, 302, 303, 304, 307]:
-                        title += " - Redirects to: %s" % page.url
-                    return message.reply(title)
-        if contentstats:
-            return message.reply("[%s]" % contentstats)
+            headers = requests.head(link, timeout=5)
+            print(headers.status_code)
+            contentstats = ""
+            if "content-type" in headers.headers:
+                contentstats += headers.headers["content-type"]
+            if "content-length" in headers.headers:
+                try:
+                    length = size(int(headers.headers["content-length"]))
+                except:
+                    length = "0B"
+                contentstats += "; " + length
+            if "html" in contentstats.lower():
+                page = requests.get(link, stream=True)
+                for chunk in page.iter_content(chunk_size=4096):
+                    brokenhtml = lxml.html.fromstring(chunk)
+                    title = brokenhtml.xpath("//title/text()")
+                    if title:
+                        title = "Title: " + title[0].strip().replace("\n", "")
+                        if headers.status_code in [301, 302, 303, 304, 307] and page.url not in link and link not in page.url:
+                            title += " - Redirects to: %s" % page.url
+                        return message.reply(title)
+            if contentstats:
+                return message.reply("[%s]" % contentstats)
 
 
 
