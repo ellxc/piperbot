@@ -7,20 +7,17 @@ from wrappers import *
 
 @plugin
 class yweather:
-    def __init__(self):
-        ""
-
     @command("weather", simple=True)
     def weather(self, message):
         """Get the current condition in a given location, from the Yahoo! Weather Service
         """
         w = self.get_yahoo_weather(message.data)
         if isinstance(w, dict):
-            yield message.reply(data=w, 
+            return message.reply(data=w, 
                 text="Weather for {0[city]}, {0[country]}: {0[condition]}, {0[temperature]}. Wind Speed: {0[wind_speed]} ({0[wind_direction]}), Wind Chill: {0[wind_chill]}. Visibility {0[visibility]}. High Temp: {0[high]}°C, Low Temp: {0[low]}°C. Sunrise: {0[sunrise]}, Sunset: {0[sunset]}.".format(w)
             )
         else:
-            yield message.reply(data=w, text=w)
+            return message.reply(data=w, text=w)
 
     @command("forecast", simple=True)
     def forecast(self, message):
@@ -28,9 +25,9 @@ class yweather:
         """
         w = self.get_yahoo_weather(message.data)
         if isinstance(w, dict):
-            yield message.reply(data=w['forecast'], text="; ".join(["{0[day]}: {0[condition]}. High: {0[high]}, Low: {0[low]}.".format(x) for x in w['forecast']]))
+            return message.reply(data=w['forecast'], text="; ".join(["{0[day]}: {0[condition]}. High: {0[high]}, Low: {0[low]}.".format(x) for x in w['forecast']]))
         else:
-            yield message.reply(data=w, text=w)
+            return message.reply(data=w, text=w)
 
     def get_yahoo_weather(self, place):
         # Use Yahoo's yql to build the query
@@ -101,9 +98,9 @@ class forecast_io:
         """
         ll = self.latlong(message.data)
         if isinstance(w, dict):
-            yield message.reply(data=ll, text="Latitude: {}, Longitude: {}".format(ll['latitude'], ll['longitude']))
+            return message.reply(data=ll, text="Latitude: {}, Longitude: {}".format(ll['latitude'], ll['longitude']))
         else:
-            yield message.reply(data=ll, text=ll)
+            return message.reply(data=ll, text=ll)
 
     @command("condition", simple=True)
     def condition(self, message):
@@ -111,13 +108,13 @@ class forecast_io:
         """
         w = self.get_forecast_io_weather(message.data)
         if isinstance(w, dict):
-            yield message.reply(data=w, 
+            return message.reply(data=w, 
                 text="Current condition for {2}: {1} {0[precipProbability]}% chance of rain. \
 {0[temperature]}°C, feels like {0[apparentTemperature]}°C. Dew Point: {0[dewPoint]}°C. \
 Humidity: {0[humidity]}. Wind Speed: {0[windSpeed]}mph bearing {0[windBearing]:03d}. \
 Cloud Cover: {0[cloudCover]}. Pressure: {0[pressure]}mb. Ozone: {0[ozone]}.".format(w['currently'], w['minutely']['summary'], message.data))
         else:
-            yield message.reply(data=w, text=w)
+            return message.reply(data=w, text=w)
 
 
     def latlong(self, place):
