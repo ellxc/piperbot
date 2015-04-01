@@ -28,7 +28,7 @@ class yweather:
         """
         w = self.get_yahoo_weather(message.data)
         if isinstance(w, dict):
-            yield message.reply(data=w['forecast'], text="; ".join(w['forecast']))
+            yield message.reply(data=w['forecast'], text="; ".join(["{0[day]}: {0[condition]}. High: {0[high]}, Low: {0[low]}.".format(x) for x in w['forecast']]))
         else:
             yield message.reply(data=w, text=w)
 
@@ -69,7 +69,10 @@ class yweather:
 
         forecast   = []
         for pred in channel['item']['forecast']:
-            c = "{0[day]}: {0[text]}. High {0[high]}°{1}, Low {0[low]}°{1}".format(pred, channel['units']['temperature'])
+            c = {"day": pred['day'],
+                 "condition": pred['text'],
+                 "high": "{0}°{1}".format(pred['high'], channel['units']['temperature']),
+                 "low": "{0}°{1}".format(pred['low'], channel['units']['temperature'])}
             forecast.append(c)
         return {"city":city,
                 "country":country,
