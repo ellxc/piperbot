@@ -17,7 +17,7 @@ class yweather:
         w = self.get_yahoo_weather(message.data)
         if isinstance(w, dict):
             yield message.reply(data=w, 
-                text="Weather for {0[city]}, {0[country]}: {0[condition]}, {0[temperature]}. Wind Speed: {0[wind_speed]} ({0[wind_direction]}), Wind Chill: {0[wind_chill]}. Visibility {0[visibility]}. High Temp: {0[high]}, Low Temp: {0[low]}. Sunrise: {0[sunrise]}, Sunset: {0[sunset]}.".format(w)
+                text="Weather for {0[city]}, {0[country]}: {0[condition]}, {0[temperature]}. Wind Speed: {0[wind_speed]} ({0[wind_direction]}), Wind Chill: {0[wind_chill]}. Visibility {0[visibility]}. High Temp: {0[high]}°C, Low Temp: {0[low]}°C. Sunrise: {0[sunrise]}, Sunset: {0[sunset]}.".format(w)
             )
         else:
             yield message.reply(data=w, text=w)
@@ -92,3 +92,58 @@ class yweather:
                 "condition":condition,
                 "forecast":forecast
                 }
+
+@plugin
+class forecast_io:
+    @command("whereis", simple=True)
+    def whereis(self, message):
+        """Get the 5 day forcast for a given location, from the Yahoo! Weather Service
+        """
+        ll = self.latlong(message.data)
+        if isinstance(w, dict):
+            yield message.reply(data=ll, text="Latitude: {}, Longitude: {}".format(ll['latitude'], ll['longitude']))
+        else:
+            yield message.reply(data=ll, text=ll)
+
+    @command("condition", simple=True)
+    def condition(self, message):
+        """Get the current weather using the https://developer.forecast.io/docs/v2 API.
+        """
+        w = self.get_forecast_io_weather(message.data)
+        if isinstance(w, dict):
+            yield message.reply(data=w, 
+                text="Current condition for {2}: {1} {0[precipProbability]}% chance of rain. \
+{0[temperature]}°C, feels like {0[apparentTemperature]}°C. Dew Point: {0[dewPoint]}°C. \
+Humidity: {0[humidity]}. Wind Speed: {0[windSpeed]}mph bearing {0[windBearing]:03d}. \
+Cloud Cover: {0[cloudCover]}. Pressure: {0[pressure]}mb. Ozone: {0[ozone]}.".format(w['currently'], w['minutely']['summary'], message.data))
+        else:
+            yield message.reply(data=w, text=w)
+
+
+    def latlong(self, place):
+        # Use Yahoo's yql to build the query
+        url = 'https://query.yahooapis.com/v1/public/yql?q=select centroid from geo.places(1) where text = "' + place + '"&format=json'
+
+        # Fetch the results
+        r = requests.get(url)
+        json = r.json()
+
+        if not json['query']['results']:
+            return "Could not find " + place + "."
+
+        return json['query']['results']['place']['centroid']
+
+    def get_forecast_io_weather(self, place):
+        ll = self.latlong(place)
+        
+        # TODO: yeild an error
+        if not isinstance(ll, dict):
+            return ll
+        
+        # Build a forecast IO request string. TODO: Remove API key and regenerate it
+        url = 'https://api.forecast.io/forecast/da05193c059f48ff118de841ccb7cd92/' + ll['latitude'] + "," + ll['longitude'] + "?units=uk"
+
+        # Fetch the results
+        r = requests.get(url)
+        json = r.json()
+        return json
