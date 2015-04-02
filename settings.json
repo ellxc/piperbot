@@ -13,15 +13,15 @@
   ],
     "servers" : [
     {
-        "IRCNet"  : "Holmes",
-      "IRCUser": "Marvin64",
-      "IRCName": "Marvin",
-		"IRCHost" : "holmes.freenode.net",
-      "IRCNick": "DevMarvin",
-		"IRCPort" : 6666,
-		"UseSSL"  : false,
+      "IRCNet"   : "Holmes",
+      "IRCUser"  : "Marvin64",
+      "IRCName"  : "Marvin",
+      "IRCHost"  : "holmes.freenode.net",
+      "IRCNick"  : "DevMarvin",
+      "IRCPort"  : 6666,
+      "UseSSL"   : false,
 
-		"AutoJoin" : ["#piperbot"],
-		"Admins" : ["Pengwin"]
+      "AutoJoin" : ["#piperbot"],
+      "Admins"   : ["Pengwin"]
     }
 ]}
