@@ -34,17 +34,20 @@ class ServerConnection():
         self.in_thread = self.InThread(self)
 
     def connect(self):
+        self.connected = True
+
+        # Attempt to create a new socket to the host, and print an error on failure.
         try:
-            self.connected = True
             self.socket.connect((self.network, self.port))
-            self.in_thread.start()
-            if self.password:
-                self.socket.send(("PASS " + self.password + "\r\n").encode())
-            self.socket.send(('NICK ' + self.nick + '\r\n').encode())
-            self.socket.send((" ".join(['USER ', self.user, "0", "*", ":Piperbot"]) + '\r\n').encode())
-        except:
-           print ("Failed to connect to %s:%s\n" % (self.network, self.port))
-           raise
+        except Exception as e:
+            print("Failed to creat socket to {}:{}".format(self.network, self.port))
+            raise e
+
+        self.in_thread.start()
+        if self.password:
+            self.socket.send(("PASS " + self.password + "\r\n").encode())
+        self.socket.send(('NICK ' + self.nick + '\r\n').encode())
+        self.socket.send((" ".join(['USER ', self.user, "0", "*", ":Piperbot"]) + '\r\n').encode())
 
     def reconnect(self):
         self.socket = socket.socket()

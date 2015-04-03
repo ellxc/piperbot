@@ -191,10 +191,16 @@ class general():
 
     @on_load
     def alaiasload(self):
-        con = pymongo.MongoClient()
-        db = con.Marvin
-        for record in db["aliases"].find():
-            self.bot.aliases[record["key"]] = record["command"]
+        # Attempt to connect to the database. On failure quit program. We can't do anything without the db
+        # TODO: Attempt to peel the database away from some of the core functionality of the bot.
+        try:
+            con = pymongo.MongoClient()
+            db = con.Marvin
+            for record in db["aliases"].find():
+                self.bot.aliases[record["key"]] = record["command"]
+        except Exception as cf:
+            print("Failed to connect to the mongo database.")
+            exit(-1)
 
     @on_unload
     def aliassave(self):

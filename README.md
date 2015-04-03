@@ -11,7 +11,8 @@ Pre-requisites
  * dill for various things related to pickling and multiproccess
  * dateutil for reminders
  * requests for sane html stuff
- * lxml for sane html parsing
+ * lxml for sane html parsing (see [this](./doc/windows.md) for information on `lxml` for Windows)
+ * PyPDF2 for reading PDF titles
  * patience it might not work completely...
  
 Running
@@ -130,4 +131,4 @@ Basic usage:
  - `#> lambda x: x*2` : Lambdas
 
 A selection of standard python functions are available. For full documentation
-see [here](./seval.md).
+see [here](./doc/seval.md).
