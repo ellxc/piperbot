@@ -263,3 +263,19 @@ class fite:
                 yield message.reply(response.format(target=nick, **data), ctcp="ACTION")
             else:
                 yield message.reply(response.format(target=nick, **data))
+
+    @trigger(lambda message, bot: message.ctcp=="ACTION" and bot.servers[message.server].nick in message.text)
+    def fiteback(self, message):
+        nicks = [nick for nick, user in self.bot.users[message.server].items() if message.params in user.channels[message.server] and nick != self.bot.servers[message.server].nick]
+        data = {
+            "sender": message.nick,
+            "bot": self.bot.servers[message.server].nick,
+            "channel": message.params,
+            "server": message.server,
+            "random": random.choice(nicks),
+        }
+        action, response = self.random_response()
+        if action:
+            yield message.reply(response.format(target=message.nick, **data), ctcp="ACTION")
+        else:
+            yield message.reply(response.format(target=message.nick, **data))

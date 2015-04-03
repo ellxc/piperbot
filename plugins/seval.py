@@ -196,6 +196,7 @@ globalenv = {
     'range': range,
     'str': str,
     "int": int,
+    "float": float,
     "dict": dict,
     "set": set,
     "sorted":sorted,
