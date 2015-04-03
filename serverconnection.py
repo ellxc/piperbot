@@ -35,7 +35,14 @@ class ServerConnection():
 
     def connect(self):
         self.connected = True
-        self.socket.connect((self.network, self.port))
+
+        # Attempt to create a new socket to the host, and print an error on failure.
+        try:
+            self.socket.connect((self.network, self.port))
+        except Exception as e:
+            print("Failed to creat socket to {}:{}".format(self.network, self.port))
+            raise e
+
         self.in_thread.start()
         if self.password:
             self.socket.send(("PASS " + self.password + "\r\n").encode())
