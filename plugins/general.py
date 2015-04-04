@@ -1,8 +1,8 @@
 import codecs
 import urllib.request
 import urllib.parse
-import pymongo
 from wrappers import *
+import json
 
 
 @plugin(desc="general")
@@ -191,24 +191,15 @@ class general():
 
     @on_load
     def alaiasload(self):
-        # Attempt to connect to the database. On failure quit program. We can't do anything without the db
-        # TODO: Attempt to peel the database away from some of the core functionality of the bot.
-        try:
-            con = pymongo.MongoClient()
-            db = con.Marvin
-            for record in db["aliases"].find():
-                self.bot.aliases[record["key"]] = record["command"]
-        except Exception as cf:
-            print("Failed to connect to the mongo database.")
-            exit(-1)
+        with open('aliases.json', 'r') as infile:
+            aliases = json.load(infile)
+            for cmd, alias in aliases.items():
+                self.bot.aliases[cmd] = alias
 
     @on_unload
     def aliassave(self):
-        con = pymongo.MongoClient()
-        db = con.Marvin
-        for key, cmd in self.bot.aliases.items():
-            db.aliases.insert({"key": key, "command": cmd})
-
+        with open('aliases.json', 'w') as outfile:
+            json.dump(self.bot.aliases, outfile, sort_keys=True, indent=4, ensure_ascii=False)
 
     @regex("^.?botsnack")
     def botsnack(self, message):
