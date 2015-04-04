@@ -88,7 +88,7 @@ class AdminTools:
     def eval(self, message):
         try:
             result = eval(message.text)
-            return message.reply(str(result), result)
+            return message.reply(result, str(result))
         except Exception as e:
             return message.reply(str(type(e)) + ": " + str(e))
 
