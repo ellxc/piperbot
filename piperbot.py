@@ -10,7 +10,6 @@ import json
 import codecs
 from sys import argv
 import sys
-import pymongo
 import string
 import functools
 import traceback
