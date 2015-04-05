@@ -1,25 +1,22 @@
 from wrappers import *
 import requests
-import lxml.html, lxml.etree
-import html
-import urllib.parse
-from collections import defaultdict
-from itertools import zip_longest
 import re
-from os.path import splitext
-from dateutil import parser
 import os
+
+from json import loads
 from io import BytesIO
 from PyPDF2 import PdfFileReader
+from os.path import splitext
+from dateutil import parser
+from html.parser import HTMLParser
+from bs4 import BeautifulSoup
 
-def grouper(iterable, n, fillvalue=None):
-    "Collect data into fixed-length chunks or blocks"
-    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
-    args = [iter(iterable)] * n
-    return zip_longest(*args, fillvalue=fillvalue)
+try:
+    import lxml
 
-
-
+    PARSER = "lxml"
+except ImportError:
+    PARSER = "html.parser"
 
 units = [
     (1024 ** 5, 'P'),
@@ -28,18 +25,13 @@ units = [
     (1024 ** 2, 'M'),
     (1024 ** 1, 'K'),
     (1024 ** 0, 'B'),
-    ]
-
-
-
-
+]
 
 metadata_regex = re.compile('(?:/(\w+)\s?\(([^\n\r]*)\)\n?\r?)', re.S)
 
+
 def read_pdf_metadata(url):
     request = requests.get(url, stream=True)
-
-    stream = BytesIO(request.content)
 
     contentstats = ""
     if "content-length" in request.headers:
@@ -52,64 +44,70 @@ def read_pdf_metadata(url):
             length = "0B"
         contentstats = length
 
+    stream = BytesIO(request.content)
     stream.seek(-2048, os.SEEK_END)
-    try:
-        properties = dict(('/' + p.group(1), p.group(2)) \
-            for p in metadata_regex.finditer(str(stream.read(2048))))
-        if '/Title' in properties:
-            return ["PDF: %s" % properties['/Title']]
-    except UnicodeDecodeError:
-        properties.clear()
-
     properties = PdfFileReader(stream).documentInfo
-    if '/Title' in properties:
-        return ["PDF: %s%s" % (properties['/Title'], (" [%s]" % contentstats) if contentstats else "")]
-    return []
+    data = {}
+    for key, value in properties.items():
+        if key.startswith("/"):
+            data[key[1:].lower()] = value
+        else:
+            data[key.lower()] = value
 
+    if 'title' in data:
+        return data, "PDF: %s%s" % (data['title'], ((" [%s]" % contentstats) if contentstats else ""))
+    return data, (" [%s]" % contentstats) if contentstats else ""
 
 
 def size(bytes):
     for factor, suffix in units:
         if bytes >= factor:
             break
-    amount = bytes/factor
+    amount = bytes / factor
     if isinstance(suffix, tuple):
         singular, multiple = suffix
         if amount == 1:
             suffix = singular
         else:
             suffix = multiple
-    return format(amount,".2f") + suffix
+    return format(amount, ".2f") + suffix
+
 
 youtuberegex = re.compile(r"(?:.*v=|https://youtu\.be\/)([^&]+?)(?:[\/&].*)?$")
+
 
 def youtube(url):
     # http://gdata.youtube.com/feeds/api/videos/
     vid = youtuberegex.match(url).group(1)
 
-    url = "http://gdata.youtube.com/feeds/api/videos/" + vid
-    tree = lxml.etree.parse(url)
+    url = "http://gdata.youtube.com/feeds/api/videos/" + vid + "?alt=json"
+    page = requests.get(url, headers=headers, stream=True)
+    json = loads(page.content.decode())
+    duration = int(json["entry"]["media$group"]["yt$duration"]["seconds"])
+    uploader = json["entry"]["author"][0]["name"]["$t"]
+    title = json["entry"]["title"]["$t"]
+    viewcount = int(json["entry"]["yt$statistics"]["viewCount"])
+    uploaded = parser.parse(json["entry"]["published"]["$t"])
 
-    title = tree.xpath('//*[name()="title"][1]/text()')[0]
-    seconds = int(tree.xpath('//*[local-name() = "duration"]/@seconds')[0])
-    publishedon = str(parser.parse(tree.xpath('//*[name()="published"]/text()')[0]).date())
-    publishedby = tree.xpath('//*[name()="author"]/*[name()="name"]/text()')[0]
-    views = format(int(tree.xpath('//*[local-name() = "statistics"]/@viewCount')[0]), ",d")
-    print(seconds)
+    data = {
+        "duration": duration,
+        "uploader": uploader,
+        "title": title,
+        "viewcount": viewcount,
+        "uploaded": uploaded,
+    }
 
-    if seconds == 0:
-        duration = " [LIVE]"
-        views += " viewers"
-    else:
-        hours = seconds // 3600
-        minutes = (seconds - (hours*3600)) // 60
-        seconds = seconds - (hours*3600) - (minutes*60)
-        duration = " [%s%s%s]" % ((str(hours) + ":") if hours else "", (str(minutes)+":") if minutes else "00:", seconds if len(str(seconds)) ==2 else ("0"+str(seconds)))
-        views += " views"
+    h, s = divmod(duration, 60)
+    h, m = divmod(h, 60)
+    time = " [%d:%02d:%02d]" % (h, m, s)
 
-    yield "YouTube: %s%s %s Posted on %s by %s" % (title, duration, views, publishedon, publishedby)
+    message = "YouTube: %s%s %s views, Posted on %s by %s" % (
+    title, time, "{:,}".format(viewcount), uploaded.date(), uploader)
+
+    return data, message
 
 
+#
 def imgur(url):
     head = requests.head(url, timeout=5)
     print(head.headers)
@@ -130,44 +128,86 @@ def imgur(url):
     titlepage = splitext(url)[0]
     page = requests.get(titlepage, headers=headers, stream=True)
 
-    tree = lxml.html.fromstring(page.content)
+    soup = BeautifulSoup(page.content, PARSER)
+    title = soup.find_all(id="image-title")
+    if title:
+        title = title[0].get_text()
 
-    title = "".join(tree.xpath('//*[@id="image-title"]/text()')).strip()
-
-    yield (("imgur: "+title+" ") if title else "") + (("[%s]" % contentstats) if contentstats else "")
-
+    return {"title":title},(("imgur: " + title + " ") if title else "") + (("[%s]" % contentstats) if contentstats else "")  #
 
 
 def wikipediaparse(url):
     page = requests.get(url, headers=headers)
-    tree = lxml.html.fromstring(page.text)
-    yield "".join(tree.xpath("//title/text()")).split()[0]+ ": " +\
-          "".join(tree.xpath('//*[@id="mw-content-text"]/p[1]/*[not(name()="sup")]//text()'
-                             '| //*[@id="mw-content-text"]/p[1]/text()'))
+    soup = BeautifulSoup(page.content, PARSER)
+    try:
+        title = soup.select(".firstHeading")[0].get_text()
+    except:
+        title = soup.title.get_text()
+    content = "".join(map(lambda x: x.get_text(), soup.select("#mw-content-text > p")[:1]))
+
+    return {"title": title, "content": content},  "Wikipedia: " + content.partition(". ")[0] + "."
 
 
 def urbandictionaryparse(url):
     page = requests.get(url, headers=headers)
-    tree = lxml.html.fromstring(page.text)
-    for defpanel in tree.xpath('//div[@class="def-panel"]'):
-        meaning = " ".join(map(lambda x: x.strip(), defpanel.xpath('./div[@class="meaning"]//text()')))
-        example = " ".join(map(lambda x: x.strip(), defpanel.xpath('./div[@class="example"]//text()')))
-        yield "Urban Dictionary: " + "".join(meaning) + ((' "%s"' % example) if example and len(example) + len(meaning) < 300 else "")
+    soup = BeautifulSoup(page.content, PARSER)
+    for defpanel in soup.select(".def-panel"):
+        meaning = " ".join(map(lambda x: x.get_text(), defpanel.select(".meaning")))
+        example = " ".join(map(lambda x: x.get_text(), defpanel.select(".example")))
+        return {"meaning": meaning, "example": example}, "Urban Dictionary: " + "".join(meaning) + ((' "%s"' % example) if example and len(example) + len(meaning) < 300 else "")
 
-headers = {'user-agent': 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US) AppleWebKit/525.13 (KHTML, like Gecko) Version/3.1 Safari/525.13'}
+headers = {
+    'user-agent': 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US) AppleWebKit/525.13 (KHTML, like Gecko) Version/3.1 Safari/525.13'}
 
 websitehandlers = {
-            r".*\.wikipedia\.org": wikipediaparse,
-            r"www\.urbandictionary\.com\/define": urbandictionaryparse,
-            r"imgur\.com/.+\..+": imgur,
-            r"youtube\.com/watch\?.+v=": youtube,
-            r"youtu\.be/.+": youtube,
-            r"\.pdf": read_pdf_metadata,
-        }
+                 r".*\.wikipedia\.org": wikipediaparse,
+                 r"www\.urbandictionary\.com\/define": urbandictionaryparse,
+    r"imgur\.com/.+\..+": imgur,
+    r"youtube\.com/watch": youtube,
+    r"youtu\.be/.+": youtube,
+    r"\.pdf": read_pdf_metadata,
+}
+
+
+class TitleHTMLParser(HTMLParser):
+    title = ""
+    intitle = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() == "title":
+            self.intitle = True
+            if self.title:
+                self.title += "; "
+
+    def handle_endtag(self, tag):
+        if tag.lower() == "title":
+            self.intitle = False
+
+    def handle_data(self, data):
+        if self.intitle:
+            self.title += data
 
 
 @plugin
 class url:
+    @command("yt", simple=True)
+    @command("youtube", simple=True)
+    def yt(self, message):
+        if isinstance(message.data, str):
+            urls = message.data.split()
+            for x in urls:
+                yield message.reply(*youtube(x))
+        elif hasattr(message.data, '__iter__'):
+            for x in message.data:
+                yield message.reply(*youtube(x))
+
+    @command
+    def pdf(self, message):
+        if isinstance(message.data, str):
+            urls = message.data.split()
+            if urls:
+                return message.reply(*read_pdf_metadata(urls[0]))
+
 
     @regex(r"((?:http[s]?://|www)(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)")
     def url(self, message):
@@ -176,35 +216,35 @@ class url:
             link = message.groups
 
             if not link.startswith("http"):
-                link = "http://"+link
-
+                link = "http://" + link
 
             for pattern, handler in websitehandlers.items():
                 if re.search(pattern, link):
-                    for response in handler(link):
-                        return message.reply(response)
+                    data, text = handler(link)
+                    return message.reply(data, text)
 
-            headers = requests.head(link, timeout=5)
-            print(headers.status_code)
+            head = requests.head(link, timeout=5)
+            print(head.status_code)
             contentstats = ""
-            if "content-type" in headers.headers:
-                contentstats += headers.headers["content-type"]
-            if "content-length" in headers.headers:
+            if "content-type" in head.headers:
+                contentstats += head.headers["content-type"]
+            else:
+                contentstats += "Unknown type"
+            if "content-length" in head.headers:
                 try:
-                    length = size(int(headers.headers["content-length"]))
+                    length = size(int(head.headers["content-length"]))
                 except:
                     length = "0B"
                 contentstats += "; " + length
             if "html" in contentstats.lower():
-                page = requests.get(link, stream=True)
-                for chunk in page.iter_content(chunk_size=4096):
-                    brokenhtml = lxml.html.fromstring(chunk)
-                    title = brokenhtml.xpath("//title/text()")
-                    if title:
-                        title = "Title: " + title[0].strip().replace("\n", "")
-                        if headers.status_code in [301, 302, 303, 304, 307] and page.url not in link and link not in page.url:
-                            title += " - Redirects to: %s" % page.url
-                        return message.reply(title)
+                page = requests.get(link, headers=headers, stream=True)
+
+                parse = TitleHTMLParser(convert_charrefs=True)
+
+                parse.feed(page.content.decode())
+                if parse.title:
+                    return message.reply("Title: " + parse.title)
+
             if contentstats:
                 return message.reply("[%s]" % contentstats)
 
@@ -212,64 +252,6 @@ class url:
 
 
 
-
-
-
-@plugin
-class searcher:
-
-
-    @command("g", simple=True)
-    def search(self, message):
-        query = "http://www.google.co.uk/search?q=" + urllib.parse.quote(message.data)
-
-        page = requests.get(query, headers=headers)
-        tree = lxml.html.fromstring(page.text)
-
-
-        result = tree.xpath('(//*[@class="r"])[1]//text()')
-        resultlink = tree.xpath('(//*[@class="r"])[1]//@href')
-        if resultlink:
-            resultlink = urllib.parse.parse_qs(urllib.parse.urlparse("test.com"+resultlink[0]).query)["q"][0] if resultlink[0].startswith("/url?") else resultlink[0]
-
-        weather = tree.xpath('//div[@class="e"][1]')
-        if weather:
-            *title, weather, source = weather[0].xpath('./h3//text() | ./table')
-            weather = "".join(weather.xpath('./tr[1]/td[2]/span/text() | ./tr[3]/td/text() | ./tr[4]/td//text() | ./tr[5]/td[1]/text()'))
-            weather = "".join(title) + " " + weather
-
-
-
-        definitionsets = list(grouper(tree.xpath('//li[@class="g"][1]/div[not(@class="e")]/h3 | //li[@class="g"][1]/div[not(@class="e")]/table'), 2))
-
-        definitions = defaultdict(list)
-
-        for h3, table in definitionsets:
-            definitiontypes = list(grouper(table.xpath("./tr/td/div/text() | ./tr/td/ol"), 2))
-            for type, ol in definitiontypes:
-                dfns = ol.xpath("./li/text()")
-                definitions[type].extend(dfns)
-
-
-        if definitions:
-            for dfntype, dfns in definitions.items():
-                yield message.reply(dfntype + ": " + " ".join(dfns[:1]))
-        elif weather:
-            yield message.reply(weather)
-        else:
-            responded = False
-            for pattern, handler in websitehandlers.items():
-                if resultlink and re.search(pattern, resultlink):
-                    for response in handler(resultlink):
-                        yield message.reply("top result: %s" % resultlink)
-                        yield message.reply(response)
-                        responded = True
-                        break
-            if not responded:
-                if resultlink:
-                    yield message.reply("top result: %s %s" % ("".join(result), resultlink))
-                elif result:
-                    yield message.reply("result: %s" % "".join(result))
 
 
 
