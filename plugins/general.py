@@ -9,7 +9,7 @@ import json
 class general():
     itersplit = re.compile(r'"([^"]*)"|([^ ]+)')
 
-    @command  # (groups="^(\S+)?$")
+    @command
     def pm(self, arg, target):
         """redirects the output to a private message"""
         try:
@@ -32,6 +32,7 @@ class general():
         for i in range(int(cnt)):
             yield message.reply(" ".join(msg))
 
+    @command("for", simple=True)
     @command("iterate", simple=True)
     def iter(self, message):
         for x in message.data:
@@ -39,8 +40,8 @@ class general():
 
     @command("reverse")
     def reverse(self, message):
-        "reverse the message's text"
-        return message.reply(message.text[::-1])
+        "reverse the message"
+        return message.reply(message.data[::-1])
 
     @command("echo")
     def echo(self, message):
@@ -68,10 +69,6 @@ class general():
         "turns the message into camel case"
         return message.reply(message.data.title())
 
-    @command("list")
-    def list(self, message):
-        "list the loaded plugins"
-        return message.reply(list(self.bot.plugins.keys()), "loaded plugins : " + ", ".join(self.bot.plugins.keys()))
 
 
 
@@ -158,14 +155,7 @@ class general():
             target.send(arg.reply(count))
             target.close()
 
-    @command("expand")
-    def expand(self, message):
-        if message.text:
-            command = message.text.split()[0].strip()
-            if command in self.bot.aliases:
-                x = self.bot.aliases[command]
-                x = self.bot.command_char+" || ".join(["%s%s" % (cmd, (" " + arg) if arg else "") for cmd, arg in x])
-                return message.reply(x)
+
 
 
     @on_load

@@ -4,11 +4,36 @@ from inspect import getdoc
 @plugin
 class Help:
 
+    @command("list")
+    def list(self, message):
+        """list the loaded plugins"""
+        return message.reply(list(self.bot.plugins.keys()), "loaded plugins: " + ", ".join(self.bot.plugins.keys()))
+
+    @command("commands")
+    def listcoms(self, message):
+        """list the available commands"""
+        return message.reply(list(self.bot.commands.keys()), "available commands: " + ", ".join(self.bot.plugins.keys()))
+
+    @command("aliases")
+    def listaliases(self, message):
+        """list the saved aliases"""
+        return message.reply(list(self.bot.aliases.keys()), "saved aliases: " + ", ".join(self.bot.plugins.keys()))
+
+    @command("expand")
+    def expand(self, message):
+        """show what an alias does"""
+        if message.text:
+            command = message.text.split()[0].strip()
+            if command in self.bot.aliases:
+                x = self.bot.aliases[command]
+                x = self.bot.command_char+" || ".join(["%s%s" % (cmd, (" " + arg) if arg else "") for cmd, arg in x])
+                return message.reply(x)
+
     @command("help", simple=True)
     def help_(self, message):
         """help <command> => returns the help for the specified command"""
         if not isinstance(message.data, str):
-            doc = inspect.getdoc(message.data)
+            doc = getdoc(message.data)
             if not doc:
                 return message.reply("No help found for passed object '%s'" % message.data.__class__.__name__)
             else:

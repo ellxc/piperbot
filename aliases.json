@@ -15,8 +15,8 @@
     ],
     "?": [
         [
-            "echo",
-            "https://github.com/ellxc/piperbot/blob/master/README.md"
+            "help",
+            "{}"
         ]
     ],
     "biaschoice": [
