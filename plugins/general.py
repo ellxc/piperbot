@@ -73,28 +73,7 @@ class general():
         "list the loaded plugins"
         return message.reply(list(self.bot.plugins.keys()), "loaded plugins : " + ", ".join(self.bot.plugins.keys()))
 
-    @command("help", simple=True)
-    def help(self, message):
-        """help <command>   -> returns the help for the specified command
-           derp derp derp
 
-        """
-        if not isinstance(message.data, str):
-            yield message.reply(
-                text="not yet implemented pydoc look up. this is a %s" % message.data.__class__.__name__)
-        else:
-            try:
-                com = message.data.split()[0]
-                func = self.bot.commands[com][0]
-            except:
-                raise Exception("specifed command not found")
-            doc = func.__doc__
-            if not doc:
-                yield message.reply("No help found for specified command")
-            else:
-                doc = "%s: %s" % (com, doc.split("\n")[0])
-                for doc in doc.split(". "):
-                    yield message.reply(doc)
 
     @command
     def strip(self, message):
