@@ -4,7 +4,7 @@ import datetime
 from wrappers import *
 from Message import Message
 from dateutil import parser
-import pymongo
+import json
 import dill
 
 
@@ -85,21 +85,18 @@ class Reminders(Thread):
 
     @on_load
     def init(self):
-        con = pymongo.MongoClient()
-        db = con["reminders"]
-        for reminder_ in db["reminders"].find():
-            self.reminders.append(dill.loads(reminder_["reminder"]))
+        with open('reminders.json', 'r') as infile:
+            rems = json.load(infile)
+            for rem in rems:
+                self.reminders.append(reminder.from_dict(rem))
         self.reminders.sort()
-        db.reminders.remove({})
 
     @on_unload
     def stop(self):
         self.ticking = False
         self.event.set()
-        con = pymongo.MongoClient()
-        db = con["reminders"]
-        for reminder in self.reminders:
-            db["reminders"].insert({"reminder": dill.dumps(reminder)})
+        with open('reminders.json', 'w') as outfile:
+            json.dump([x.to_dict() for x in self.reminders], outfile, sort_keys=True, indent=4, ensure_ascii=False)
 
     @command("date")
     def parse(self, message):
@@ -175,7 +172,7 @@ class Reminders(Thread):
                         if setfor == "me":
                             setfor = message.nick
 
-                        settext = msg or arg.data
+                        settext = msg or ""
                         responsetext = "reminder set to go in %s!" % str(datetime.timedelta(seconds=total))
                     elif message.text.split()[1:2] == ["at"] or message.text.split()[1:2] == ["on"]:
                         date, *msg = message.text[3:].split("to ")
@@ -185,7 +182,7 @@ class Reminders(Thread):
                         if setfor == "me":
                             setfor = message.nick
 
-                        settext = msg or arg.data
+                        settext = msg or ""
                         responsetext = "reminder set for %s!" % str(settime)
                     else:
                         try:
@@ -248,6 +245,32 @@ class reminder:
         else:
             text += "!"
         return Message(server=self.server, command="PRIVMSG", params=self.channel, text=text)
+
+    @classmethod
+    def from_dict(cls, data):
+        assert isinstance(data, dict)
+
+        set_by = data.get("set_by", "???")
+        set_for = data.get("set_for", "???")
+        set_time = parser.parse(data.get("set_time"))
+        due_time = parser.parse(data.get("due_time"))
+        msg = data.get("msg","")
+        channel = data.get("channel")
+        server = data.get("server")
+
+        return reminder(set_by, set_for, set_time, due_time, msg, channel, server)
+
+    def to_dict(self):
+        return {
+            "set_by": self.set_by,
+            "set_for": self.set_for,
+            "set_time": str(self.set_time),
+            "due_time": str(self.due_time),
+            "msg": self.message,
+            "channel": self.channel,
+            "server": self.server
+        }
+
 
     def __lt__(self, other):
         try:
