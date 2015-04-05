@@ -287,17 +287,22 @@ class PiperBot(threading.Thread):
         self.worker_pool.starmap_async(self.call_triggered, triggered, error_callback=print)
 
     def call_triggered(self, func, message, pre=[], post=[]):
-        pipe = self.resulter()
+        try:
+            pipe = self.resulter()
 
-        for _, _, func_, in post:
+            for _, _, func_, in post:
+                    pipe = func_(message, pipe)
+
+            pipe = func(pipe)
+            next(pipe)
+            for _, _, func_ in pre:
                 pipe = func_(message, pipe)
 
-        pipe = func(pipe)
-        next(pipe)
-        for _, _, func_ in pre:
-            pipe = func_(message, pipe)
-
-        pipe.send(message)
+            pipe.send(message)
+        except StopIteration as e:
+            raise e
+        except Exception as e:
+            print("Error calling trigger: %s : %s: %s" % (func.__name__, type(e), e))
 
     def handle_alias_assign(self, message):
         try:
