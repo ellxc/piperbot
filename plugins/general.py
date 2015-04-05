@@ -191,10 +191,13 @@ class general():
 
     @on_load
     def alaiasload(self):
-        with open('aliases.json', 'r') as infile:
-            aliases = json.load(infile)
-            for cmd, alias in aliases.items():
-                self.bot.aliases[cmd] = alias
+        try:
+            with open('aliases.json', 'r') as infile:
+                aliases = json.load(infile)
+                for cmd, alias in aliases.items():
+                    self.bot.aliases[cmd] = alias
+        except FileNotFoundError:
+            pass
 
     @on_unload
     def aliassave(self):

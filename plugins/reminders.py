@@ -85,11 +85,14 @@ class Reminders(Thread):
 
     @on_load
     def init(self):
-        with open('reminders.json', 'r') as infile:
-            rems = json.load(infile)
-            for rem in rems:
-                self.reminders.append(reminder.from_dict(rem))
-        self.reminders.sort()
+        try:
+            with open('reminders.json', 'r') as infile:
+                rems = json.load(infile)
+                for rem in rems:
+                    self.reminders.append(reminder.from_dict(rem))
+            self.reminders.sort()
+        except FileNotFoundError:
+            pass
 
     @on_unload
     def stop(self):

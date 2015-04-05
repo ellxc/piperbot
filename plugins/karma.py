@@ -11,10 +11,13 @@ class Karma:
 
     @on_load
     def onload(self):
-        with open('karma.json', 'r') as infile:
-            aliases = json.load(infile)
-            for name, score in aliases.items():
-                self.karma[name] = score
+        try:
+            with open('karma.json', 'r') as infile:
+                aliases = json.load(infile)
+                for name, score in aliases.items():
+                    self.karma[name] = score
+        except FileNotFoundError:
+            pass
 
     @on_unload
     def onunload(self):
