@@ -12,12 +12,12 @@ class Help:
     @command("commands")
     def listcoms(self, message):
         """list the available commands"""
-        return message.reply(list(self.bot.commands.keys()), "available commands: " + ", ".join(self.bot.plugins.keys()))
+        return message.reply(list(self.bot.commands.keys()), "available commands: " + ", ".join(self.bot.commands.keys()))
 
     @command("aliases")
     def listaliases(self, message):
         """list the saved aliases"""
-        return message.reply(list(self.bot.aliases.keys()), "saved aliases: " + ", ".join(self.bot.plugins.keys()))
+        return message.reply(list(self.bot.aliases.keys()), "saved aliases: " + ", ".join(self.bot.aliases.keys()))
 
     @command("expand")
     def expand(self, message):
