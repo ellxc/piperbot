@@ -93,8 +93,11 @@ class ServerConnection():
 
 
     def disconnect(self, message=""):
-        self.socket.send(('QUIT :' + message + '\r\n').encode())
-        self.socket.close()
+        try:
+            self.socket.send(('QUIT :' + message + '\r\n').encode())
+            self.socket.close()
+        except BrokenPipeError:
+            pass  # assume socket closed
         self.connected = False
 
 
