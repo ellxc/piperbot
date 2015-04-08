@@ -1,8 +1,15 @@
 import ast
 from collections import OrderedDict, ChainMap
 
+
+def and_(args):
+    for x in iter(args):
+        if not x:
+            return x
+    return x
+
 boolops = {
-    ast.And: all,  # this functions well enough, who uses 'and' to get values anyway?
+    ast.And: and_,  # this functions well enough, who uses 'and' to get values anyway?
     ast.Or: lambda vals: next(filter(bool, vals)),
 }
 

@@ -1,7 +1,7 @@
 import ast
 from wrappers import *
 from plugins.stuff.seval import seval
-
+from collections import defaultdict
 import math
 import datetime
 import json
@@ -28,6 +28,8 @@ class Eval:
 
     def __init__(self):
         self.localenv = {}
+       # self.userspaces = de
+
 
     @adv_command(">", bufferreplace=False, argparse=False)
     @adv_command("seval", bufferreplace=False, argeparse=False)
@@ -60,9 +62,9 @@ class Eval:
                 if message is None:
                     pass
                 else:
-                    response, _ = timed(sevalcall, args=(arg.text.strip(), self.localenv, message))
-
-                    if response:
+                    response, *_ = timed(sevalcall, args=(arg.text.strip(), self.localenv, message))
+                    print(response)
+                    if response and response[-1]:
                         target.send(message)
 
 
@@ -76,41 +78,90 @@ class Eval:
         return message.reply(result, repr(result))
 
 
-def sevalcall(text, localenv, message):
-    env = localenv.copy()
+class userspace(dict):
+     def __init__(self, *args, **kwargs):
+         super(userspace, self).__init__(*args, **kwargs)
 
-    globalenv = {
-    "maxint": sys.maxsize,
-    'len': len,
-    'hex': hex,
-    'map': map,
-    'range': range,
-    'str': str,
-    "int": int,
-    "float": float,
+     def __getattr__(self, name):
+         if name not in self:
+             if name.startswith("__"):
+                 return dict.__getattribute__(self, name)
+             else:
+                 self[name] = userspace()
+         return self[name]
+
+     def __setattr__(self, key, value):
+         self[key] = value
+
+
+globalenv = {
+    "abs": abs,
+    "all": all,
+    "any": any,
+    "ascii": ascii,
+    "bin": bin,
+    "bool": bool,
+    "callable": callable,
+    "chr": chr,
+    "complex": complex,
     "dict": dict,
+    "dir": dir,
+    "divmod": divmod,
+    "enumerate": enumerate,
+    "filter": filter,
+    "float": float,
+    "format": format,
+    "hasattr": hasattr,
+    "hash": hash,
+    "hex": hex,
+    "isinstance": isinstance,
+    "issubclass": issubclass,
+    "iter": iter,
+    "len": len,
+    "list": list,
+    "map": map,
+    "max": max,
+    "min": min,
+    "next": next,
+    "oct": oct,
+    "ord": ord,
+    "pow": pow,
+    "range": range,
+    "repr": repr,
+    "reversed": reversed,
+    "round": round,
     "set": set,
-    "sorted":sorted,
+    "slice": slice,
+    "sorted": sorted,
+    "str": str,
+    "sum": sum,
+    "tuple": tuple,
+    "type": type,
+    "zip": zip,
+
     "json":json,
-    'zip': zip,
-    'list': list,
-    'bool': bool,
     "sin": math.sin,
     "pi": math.pi,
     "math": math,
-    "ord": ord,
-    "chr": chr,
     "random": random,
     "datetime": datetime.datetime,
     "date": datetime.date,
     "time": datetime.time,
     "timedelta": datetime.timedelta,
     "timestamp": datetime.datetime.fromtimestamp,
-    "message": message,
     "re": re,
-    }
+}
+
+def sevalcall(text, localenv, message):
+    env = localenv.copy()
+
+   # env.update(userspaces)
+
+
 
     env.update(globalenv)
+
+    env.update(message=message)
 
     responses = seval(text, env)
 
@@ -118,4 +169,4 @@ def sevalcall(text, localenv, message):
         if key not in globalenv:
             localenv[key] = item
 
-    return responses, localenv
+    return responses, localenv#, self
