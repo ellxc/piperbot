@@ -234,9 +234,9 @@ class fite:
         else:
             return False, self.messages[number]
 
-    @command("fighte", simple=True)
-    @command("fight", simple=True)
-    @command(simple=True)
+    @command("fighte")
+    @command("fight")
+    @command
     def fite(self, message):
         #assert isinstance(message.data,str), ValueError("needs to be a string")
         nicks = [nick for nick, user in self.bot.users[message.server].items() if message.params in user.channels[message.server] and nick != self.bot.servers[message.server].nick]

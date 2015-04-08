@@ -35,7 +35,35 @@ def on_unload(func):
     return func
 
 
-def command(name=None, simple=False, **kwargs):
+def adv_command(name=None, **kwargs):
+    def _coroutine(func):
+        if hasattr(func, '_commands'):
+            func._commands.append(dict(kwargs,
+                                       command=name
+                                       if not inspect.isfunction(name) and name is not None
+                                       else func.__name__))
+            return func
+
+        func._commands = []
+        func2 = dict(kwargs, command=name if not inspect.isfunction(name) and name is not None else func.__name__)
+        func._commands.append(func2)
+
+
+        @functools.wraps(func)
+        def generator(self, args, target):
+            x = func(self, args, target)
+            next(x)
+            return x
+
+        return generator
+
+    if inspect.isfunction(name):
+        return _coroutine(name)
+    else:
+        return _coroutine
+
+
+def command(name=None, **kwargs):
     def _coroutine(func):
 
         if hasattr(func, '_commands'):
@@ -49,51 +77,43 @@ def command(name=None, simple=False, **kwargs):
         func2 = dict(kwargs, command=name if not inspect.isfunction(name) and name is not None else func.__name__)
         func._commands.append(func2)
 
-        if inspect.isgeneratorfunction(func) and not simple:
-            @functools.wraps(func)
-            def generator(self, args, target):
-                x = func(self, args, target)
-                next(x)
-                return x
 
-            return generator
-        else:
-            @functools.wraps(func)
-            def generator(self, args, target):
-                def inner(target):
-                    arg = args
-                    formats = len(list(string.Formatter().parse(arg.data)))
-                    try:
-                        while True:
-                            line = yield
-                            if line is None:
-                                if formats:
-                                    x = func(self, arg.reply(arg.data.format(*([""] * formats)), args=arg.args))
-                                else:
-                                    x = func(self, arg)
+        @functools.wraps(func)
+        def generator(self, args, target):
+            def inner(target):
+                arg = args
+                formats = len(list(string.Formatter().parse(arg.data)))
+                try:
+                    while True:
+                        line = yield
+                        if line is None:
+                            if formats:
+                                x = func(self, arg.reply(arg.data.format(*([""] * formats)), args=arg.args))
                             else:
-                                if formats:
-                                    if line.data is not None:
-                                        x = func(self, line.reply(arg.data.format(*([line.data] * formats)), args=arg.args))
-                                    else:
-                                        x = func(self, line.reply(arg.data.format(*([""] * formats)), args=arg.args))
+                                x = func(self, arg)
+                        else:
+                            if formats:
+                                if line.data is not None:
+                                    x = func(self, line.reply(arg.data.format(*([line.data] * formats)), args=arg.args))
                                 else:
-                                    x = func(self, line.reply(line.data, args=arg.args))
-                            if x is not None:
-                                if inspect.isgenerator(x):
-                                    for y in x:
-                                        target.send(y)
-                                else:
-                                    target.send(x)
-                    except GeneratorExit:
-                        if target is not None:
-                            target.close()
+                                    x = func(self, line.reply(arg.data.format(*([""] * formats)), args=arg.args))
+                            else:
+                                x = func(self, line.reply(line.data, args=arg.args))
+                        if x is not None:
+                            if inspect.isgenerator(x):
+                                for y in x:
+                                    target.send(y)
+                            else:
+                                target.send(x)
+                except GeneratorExit:
+                    if target is not None:
+                        target.close()
 
-                ret = inner(target)
-                next(ret)
-                return ret
+            ret = inner(target)
+            next(ret)
+            return ret
 
-            return generator
+        return generator
 
     if inspect.isfunction(name):
         return _coroutine(name)

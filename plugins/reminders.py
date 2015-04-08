@@ -117,14 +117,14 @@ class Reminders(Thread):
         reminders = []
         for reminder_ in self.reminders:
             if message.nick == reminder_.set_for:
-                reminders.append(reminder_)
+                reminders.append(reminder_.to_dict())
         text = "you have %s reminders!"
         count = len(reminders)
 
         text %= count
         return message.reply(reminders, text)
 
-    @command
+    @adv_command
     def remind(self, arg, target):
         """ remind <target> (in|at|on) (quantiy unit|datetime) to (message) -> sets a reminder, also accepts a piped in datetime, timedelta or string objects
         :param message:

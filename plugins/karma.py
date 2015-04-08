@@ -24,7 +24,7 @@ class Karma:
         with open('karma.json', 'w') as outfile:
             json.dump(self.karma, outfile, sort_keys=True, indent=4, ensure_ascii=False)
 
-    @regex(r"(?:\[([^\[\]]+)\]|(\S+))(\+\+|--)")
+    @regex(r"(?:(\S+): |(\S+))(\+\+|--)")
     def mod(self, message):
         if message.nick != (message.groups[0] or message.groups[1]):
             self.karma[(message.groups[0] or message.groups[1]).lower()] += {"++": 1, "--": -1}[message.groups[2]]

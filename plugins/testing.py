@@ -34,7 +34,7 @@ class testing2:
         return message.reply("yes {}, you are an admin!".format(message.nick))
 
 
-    @command("time")
+    @adv_command("time")
     def timer(self, arg, target):
         start = time.perf_counter()
         try:

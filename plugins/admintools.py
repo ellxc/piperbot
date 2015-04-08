@@ -25,7 +25,7 @@ class AdminTools:
 
 
 
-    @command("join", adminonly=True, simple=True)
+    @command("join", adminonly=True)
     def join(self, message):
         response = message.reply("")
         response.command = "JOIN"

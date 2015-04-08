@@ -2,8 +2,7 @@ from wrappers import *
 import requests
 import re
 import os
-
-from json import loads
+import json
 from io import BytesIO
 from PyPDF2 import PdfFileReader
 from os.path import splitext
@@ -73,7 +72,7 @@ def size(bytes):
     return format(amount, ".2f") + suffix
 
 
-youtuberegex = re.compile(r"(?:.*v=|https://youtu\.be\/)([^&]+?)(?:[\/&].*)?$")
+youtuberegex = re.compile(r"(?:.*v=|https://youtu\.be\/)([^&]+?)(?:[\/&?].*)?$")
 
 
 def youtube(url):
@@ -82,12 +81,12 @@ def youtube(url):
 
     url = "http://gdata.youtube.com/feeds/api/videos/" + vid + "?alt=json"
     page = requests.get(url, headers=headers, stream=True)
-    json = loads(page.content.decode())
-    duration = int(json["entry"]["media$group"]["yt$duration"]["seconds"])
-    uploader = json["entry"]["author"][0]["name"]["$t"]
-    title = json["entry"]["title"]["$t"]
-    viewcount = int(json["entry"]["yt$statistics"]["viewCount"])
-    uploaded = parser.parse(json["entry"]["published"]["$t"])
+    data = json.loads(page.content.decode())
+    duration = int(data["entry"]["media$group"]["yt$duration"]["seconds"])
+    uploader = data["entry"]["author"][0]["name"]["$t"]
+    title = data["entry"]["title"]["$t"]
+    viewcount = int(data["entry"]["yt$statistics"]["viewCount"])
+    uploaded = parser.parse(data["entry"]["published"]["$t"])
 
     data = {
         "duration": duration,
@@ -102,12 +101,53 @@ def youtube(url):
     time = " [%d:%02d:%02d]" % (h, m, s)
 
     message = "YouTube: %s%s %s views, Posted on %s by %s" % (
-    title, time, "{:,}".format(viewcount), uploaded.date(), uploader)
+        title, time, "{:,}".format(viewcount), uploaded.date(), uploader)
 
     return data, message
 
 
-#
+def amazon(url):
+    page = requests.get(url, headers=headers)
+    soup = BeautifulSoup(page.content, PARSER)
+
+    data = {
+        "title":"404",
+        "solby":"",
+        "price":"",
+        "rating": "",
+        "noreviews": "",
+    }
+
+    title = soup.select("#productTitle")
+    if title:
+        data["title"] = title[0].get_text()
+
+    soldby = soup.select("#merchant-info > a")
+    if soldby:
+        data["solby"] = soldby[0].get_text()
+
+    price = soup.select("#priceblock_ourprice")
+    if price:
+        data["price"] = price[0].get_text()
+    else:
+        price = soup.select(".a-color-price")
+        if price:
+            data["price"] = price[0].get_text()
+
+    rating = soup.select("#avgRating > span")
+    if rating:
+        data["rating"] = rating[0].get_text()
+    noreviews = soup.select("#acrCustomerReviewText")
+    if noreviews:
+        data["noreviews"] = noreviews[0].get_text()
+
+    print(data)
+
+    message = "amazon: " + data["title"]+ " " + data["price"] + ((" sold by " + data["solby"]) if data["solby"] else "") +\
+              ((data["rating"] + data["noreviews"]) if data["rating"] else "")
+
+    return data, message
+
 def imgur(url):
     head = requests.head(url, timeout=5)
     print(head.headers)
@@ -131,9 +171,10 @@ def imgur(url):
     soup = BeautifulSoup(page.content, PARSER)
     title = soup.find_all(id="image-title")
     if title:
-        title = title[0].get_text()
+        title = title[0].get_text().strip()
 
-    return {"title":title},(("imgur: " + title + " ") if title else "") + (("[%s]" % contentstats) if contentstats else "")  #
+    return {"title": title}, (("imgur: " + title + " ") if title else "") + (
+    ("[%s]" % contentstats) if contentstats else "")  #
 
 
 def wikipediaparse(url):
@@ -145,7 +186,7 @@ def wikipediaparse(url):
         title = soup.title.get_text()
     content = "".join(map(lambda x: x.get_text(), soup.select("#mw-content-text > p")[:1]))
 
-    return {"title": title, "content": content},  "Wikipedia: " + content.partition(". ")[0] + "."
+    return {"title": title, "content": content}, "Wikipedia: " + content.partition(". ")[0] + "."
 
 
 def urbandictionaryparse(url):
@@ -154,18 +195,21 @@ def urbandictionaryparse(url):
     for defpanel in soup.select(".def-panel"):
         meaning = " ".join(map(lambda x: x.get_text(), defpanel.select(".meaning")))
         example = " ".join(map(lambda x: x.get_text(), defpanel.select(".example")))
-        return {"meaning": meaning, "example": example}, "Urban Dictionary: " + "".join(meaning) + ((' "%s"' % example) if example and len(example) + len(meaning) < 300 else "")
+        return {"meaning": meaning, "example": example}, "Urban Dictionary: " + "".join(meaning) + (
+        (' "%s"' % example) if example and len(example) + len(meaning) < 300 else "")
+
 
 headers = {
     'user-agent': 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US) AppleWebKit/525.13 (KHTML, like Gecko) Version/3.1 Safari/525.13'}
 
 websitehandlers = {
-                 r".*\.wikipedia\.org": wikipediaparse,
-                 r"www\.urbandictionary\.com\/define": urbandictionaryparse,
+    r".*\.wikipedia\.org": wikipediaparse,
+    r"www\.urbandictionary\.com\/define": urbandictionaryparse,
     r"imgur\.com/.+\..+": imgur,
     r"youtube\.com/watch": youtube,
     r"youtu\.be/.+": youtube,
     r"\.pdf": read_pdf_metadata,
+    r"amazon\..+?\/.+?\/dp": amazon,
 }
 
 
@@ -190,8 +234,28 @@ class TitleHTMLParser(HTMLParser):
 
 @plugin
 class url:
-    @command("yt", simple=True)
-    @command("youtube", simple=True)
+    def __init__(self):
+        self.links = []
+
+
+    @on_load
+    def load(self):
+        try:
+            with open('links.json', 'r') as infile:
+                history = json.load(infile)
+                for link in history:
+                    self.links.append(link)
+        except FileNotFoundError:
+            pass
+
+
+    @on_unload
+    def unload(self):
+        with open('links.json', 'w') as outfile:
+            json.dump(self.links, outfile, sort_keys=True, indent=4, ensure_ascii=False)
+
+    @command("yt")
+    @command("youtube")
     def yt(self, message):
         if isinstance(message.data, str):
             urls = message.data.split()
@@ -243,7 +307,7 @@ class url:
 
                 parse.feed(page.content.decode())
                 if parse.title:
-                    return message.reply("Title: " + parse.title)
+                    return message.reply("Title: " + parse.title.strip())
 
             if contentstats:
                 return message.reply("[%s]" % contentstats)

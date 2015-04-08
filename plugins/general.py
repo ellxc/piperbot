@@ -9,7 +9,7 @@ import json
 class general():
     itersplit = re.compile(r'"([^"]*)"|([^ ]+)')
 
-    @command
+    @adv_command
     def pm(self, arg, target):
         """redirects the output to a private message"""
         try:
@@ -23,7 +23,7 @@ class general():
             target.close()
 
 
-    @command("repeat", simple=True)
+    @command("repeat")
     def rep(self, message):
         cnt, *msg = message.text.split()
         cnt = int(cnt)
@@ -32,8 +32,8 @@ class general():
         for i in range(int(cnt)):
             yield message.reply(" ".join(msg))
 
-    @command("for", simple=True)
-    @command("iterate", simple=True)
+    @command("for")
+    @command("iterate")
     def iter(self, message):
         for x in message.data:
             yield message.reply(x)
@@ -77,7 +77,7 @@ class general():
         "strip the message of any whitespace"
         return message.reply(message.data.strip())
 
-    @command
+    @adv_command
     def split(self, arg, target):
         splitby = arg.text or " "
         try:
@@ -126,7 +126,7 @@ class general():
                 target.send(arg.reply(response))
             target.close()
 
-    @command
+    @adv_command
     def cat(self, arg, target):
         """concat all messages to one line joined by arg.text or ' '"""
         data = []
@@ -141,7 +141,8 @@ class general():
             target.send(arg.reply(data))
             target.close()
 
-    @command
+
+    @adv_command
     def wc(self, arg, target):
         count = 0
         try:

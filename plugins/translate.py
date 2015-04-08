@@ -2,9 +2,16 @@ import urllib.request
 import urllib.error
 import urllib.parse
 import json
+import requests
+import html
 
 from wrappers import *
-
+from bs4 import BeautifulSoup
+try:
+    import lxml
+    PARSER = "lxml"
+except ImportError:
+    PARSER = "html.parser"
 
 @plugin(desc="google translator")
 class Google():
@@ -55,17 +62,32 @@ class Google():
         else:
             raise Exception("language: {} not recognised".format(lang_to))
             
-        return self.translate_language(text, lang_from_key, lang_to_key, verbose)
+        return self.translate_language(text, lang_from_key, lang_to_key)
+
+    def new_translate(self, text, source="auto", dest="en"):
+        url = "https://translate.google.co.uk/#%s/%s/" % (source, dest) + html.escape(text) + "&eotf=0"
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US) AppleWebKit/525.13 (KHTML, like Gecko) Version/3.1 Safari/525.13'}
+        page = requests.get(url, headers=headers)
+        soup = BeautifulSoup(page.content, PARSER)
+        transalte = soup.select(".hps")
+        print(page.content,file=open("temp.html","w"))
+        if transalte:
+            ret = transalte[0].get_text()
+        else:
+            ret = "dno"
+        return "dno", ret
+
             
     def translate_language(self, text, source_lang="auto", dest_lang="en", verbose=True):
         translate_params = {"client": "xxxxxxx", "text": text, "hl": "en", "sl": source_lang,
                             "tl": dest_lang, "ie": "UTF-8", "oe": "UTF-8"}
-        url_translate = "http://translate.google.com/translate_a/t?"
-        headers = {'User-Agent': 'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'}
-        url = url_translate + urllib.parse.urlencode(translate_params)
-        req = urllib.request.Request(url, None, headers)
+        url_translate = "http://translate.google.com/translate_a/t?ie=UTF-8&oe=UTF-8&sl=%s&hl=en&text=%s&tl=%s&client=XXXX" % (source_lang, text, dest_lang)
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US) AppleWebKit/525.13 (KHTML, like Gecko) Version/3.1 Safari/525.13'}
+        url = url_translate
+        page = requests.get(url, headers=headers)
+        print(page.content)
         #true = "true"
-        response = json.loads(urllib.request.urlopen(req).read().decode())
+        response = json.loads(page.content.decode())
         lang = self.lang_out[response["src"]] if response["src"] in self.lang_out else response["src"]
         lang = lang + " to " + self.lang_out[dest_lang] + ": "
         if verbose and "dict" in response and len(response["dict"][0]["terms"]) > 1:

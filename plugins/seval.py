@@ -451,8 +451,8 @@ class Eval:
     #         for key, val in space.items():
     #             db[user].insert({"key": key, "bin": pickle.dumps(val)})
 
-    @command(">", bufferreplace=False, argparse=False)
-    @command("seval", bufferreplace=False, argeparse=False)
+    @adv_command(">", bufferreplace=False, argparse=False)
+    @adv_command("seval", bufferreplace=False, argeparse=False)
     def calc(self, arg, target):
         """oh boy, so this is a python interpreter, you can do most things you could do from a terminal, but only single line statements are allowed. you can chain multiple single statements together using ';' and you can access any piped in message via 'message'"""
         env = dict(globalenv)
@@ -473,7 +473,7 @@ class Eval:
         except GeneratorExit:
             target.close()
 
-    @command("filter", bufferreplace=False, argeparse=False)
+    @adv_command("filter", bufferreplace=False, argeparse=False)
     def filt(self, arg, target):
         env = dict(globalenv)
         env.update(localenv)
@@ -497,4 +497,5 @@ class Eval:
     @command("liteval", bufferreplace=False, argeparse=False)
     def liteval(self, message):
         'will evaluate python literals. pretty simple version of seval'
-        return message.reply(repr(ast.literal_eval(message.text.strip())))
+        result = ast.literal_eval(message.text.strip())
+        return message.reply(result, repr(result))

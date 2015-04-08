@@ -26,7 +26,7 @@ class Help:
             command = message.text.split()[0].strip()
             if command in self.bot.aliases:
                 x = self.bot.aliases[command]
-                x = self.bot.command_char+" || ".join(["%s%s" % (cmd, (" " + arg) if arg else "") for cmd, arg in x])
+                x = self.bot.command_char+ "alias %s = " % command + " || ".join(["%s%s" % (cmd, (" " + arg) if arg else "") for cmd, arg in x])
                 return message.reply(x)
 
     @command("help", simple=True)

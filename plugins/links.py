@@ -29,7 +29,7 @@ class linker:
         else:
             raise ValueError("not a valid url")
 
-    @command
+    @adv_command
     def burl(self, arg, target):
         url = arg.text
         try:

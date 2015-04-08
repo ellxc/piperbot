@@ -7,7 +7,7 @@ from wrappers import *
 
 @plugin
 class yweather:
-    @command("weather", simple=True)
+    @command("weather")
     def weather(self, message):
         """Get the current condition in a given location, from the Yahoo! Weather Service
         """
@@ -19,7 +19,7 @@ class yweather:
         else:
             return message.reply(data=w, text=w)
 
-    @command("forecast", simple=True)
+    @command("forecast")
     def forecast(self, message):
         """Get the 5 day forcast for a given location, from the Yahoo! Weather Service
         """
@@ -92,17 +92,17 @@ class yweather:
 
 @plugin
 class forecast_io:
-    @command("whereis", simple=True)
+    @command("whereis")
     def whereis(self, message):
         """Get the 5 day forcast for a given location, from the Yahoo! Weather Service
         """
         ll = self.latlong(message.data)
-        if isinstance(w, dict):
+        if isinstance(ll, dict):
             return message.reply(data=ll, text="Latitude: {}, Longitude: {}".format(ll['latitude'], ll['longitude']))
         else:
             return message.reply(data=ll, text=ll)
 
-    @command("condition", simple=True)
+    @command("condition")
     def condition(self, message):
         """Get the current weather using the https://developer.forecast.io/docs/v2 API.
         """
