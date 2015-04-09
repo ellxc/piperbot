@@ -269,6 +269,7 @@ def run_procced(p2, fun, args, kwargs):
     try:
         result = fun(*args, **kwargs)
         print(result, file=open(os.devnull, "w"))  # hack hack hack
+        p2.send(result)
     except Exception as e:
         p2.send(e)
 
