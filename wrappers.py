@@ -269,9 +269,11 @@ def trigger(trigger_=None):
 
 def run_procced(p2, fun, args, kwargs):
     os.nice(20)
-    result = fun(*args, **kwargs)
-    print(result)
-    p2.send(result)
+    try:
+        result = fun(*args, **kwargs)
+        p2.send(result)
+    except Exception as e:
+        p2.send(e)
 
 
 def killproc(p):
@@ -284,7 +286,11 @@ def timed(func, args=(), kwargs={}, timeout=2, proc=True):
     p.start()
     try:
         if p1.poll(timeout=timeout):
-            return p1.recv()
+            result = p1.recv()
+            if isinstance(result, Exception):
+                raise result
+            else:
+                return result
         else:
             raise TimeoutError
     except TimeoutError as e:
