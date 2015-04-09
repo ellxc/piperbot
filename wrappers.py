@@ -1,14 +1,11 @@
 import re
-from multiprocessing import Pool
-from multiprocessing.pool import ThreadPool
 from multiprocessing import TimeoutError
 import functools
 import inspect
 import string
 from enum import IntEnum
-import dill
 import os
-from multiprocessing import Queue, Process, Pipe
+from multiprocessing import Process, Pipe
 
 
 def plugin(desc=None, thread=False):
@@ -271,7 +268,7 @@ def run_procced(p2, fun, args, kwargs):
     os.nice(20)
     try:
         result = fun(*args, **kwargs)
-        p2.send(result)
+        print(result, file=open(os.devnull, "w"))  # hack hack hack
     except Exception as e:
         p2.send(e)
 
