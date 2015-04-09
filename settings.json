@@ -9,7 +9,14 @@
     "maths",
     "reminders",
     "translate",
-    "users"
+    "users",
+    "regex",
+    "spamfilter",
+    "links",
+    "web",
+    "fite",
+    "weather",
+    "help"
   ],
     "servers" : [
     {
@@ -20,7 +27,7 @@
       "IRCNick"  : "DevMarvin",
       "IRCPort"  : 6666,
       "UseSSL"   : false,
-
+      "IRCPass"  : "",
       "AutoJoin" : ["#piperbot"],
       "Admins"   : ["Pengwin"]
     }

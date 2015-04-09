@@ -7,6 +7,7 @@ import datetime
 import json
 import random
 import sys
+import pytz
 
 @plugin
 class Eval:
@@ -117,6 +118,7 @@ globalenv = {
     "isinstance": isinstance,
     "issubclass": issubclass,
     "iter": iter,
+    "int": int,
     "len": len,
     "list": list,
     "map": map,
@@ -150,6 +152,7 @@ globalenv = {
     "timedelta": datetime.timedelta,
     "timestamp": datetime.datetime.fromtimestamp,
     "re": re,
+    "pytz": pytz,
 }
 
 def sevalcall(text, localenv, message):
