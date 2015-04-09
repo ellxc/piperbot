@@ -77,9 +77,10 @@ class spamfilter:
                         target.send(Message(server=server, params=channel,command="PRIVMSG", text="spam detected, here is the output: %s" % response))
             target.close()
 
-    @extension(priority=998,type=extensiontype.command)
+    @extension(priority=998, type=extensiontype.regex)
+    @extension(priority=998, type=extensiontype.command)
     def toolarge(self, message):
-
-        if len(bytearray(message.text.encode('utf-8'))) > 1000:
-            message.text = "message too large, here is the output: " + urllib.request.urlopen(urllib.request.Request('http://sprunge.us', urllib.parse.urlencode({'sprunge': message.text}).encode('utf-8'))).read().decode()
-        return message
+        if message.command in ["PRIVMSG", "ACTION", "NOTICE"]:
+            if len(bytearray(message.text.encode('utf-8'))) > 550:
+                message.text = "message too large, here is the output: " + urllib.request.urlopen(urllib.request.Request('http://sprunge.us', urllib.parse.urlencode({'sprunge': message.text}).encode('utf-8'))).read().decode()
+            return message

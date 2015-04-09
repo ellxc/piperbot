@@ -279,6 +279,8 @@ def timed(func, args=(), kwargs={}, timeout=2, proc=True):
         except TimeoutError as e:
             pool.terminate()
             raise Exception("Took more than %s seconds" % timeout)
+        except MemoryError as e:
+            raise MemoryError("proccess ran out of memory")
 
 
 def _plugin__init__(self, bot):
