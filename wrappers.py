@@ -7,6 +7,8 @@ import inspect
 import string
 from enum import IntEnum
 import dill
+import os
+from multiprocessing import Queue, Process, Pipe
 
 
 def plugin(desc=None, thread=False):
@@ -265,22 +267,33 @@ def trigger(trigger_=None):
 
 
 
-def run_dill_encoded(what):
-    fun, args, kwargs = dill.loads(what)
-    result = dill.dumps(fun(*args, **kwargs))
-    return result
+def run_procced(p2, fun, args, kwargs):
+    os.nice(20)
+    result = fun(*args, **kwargs)
+    print(result)
+    p2.send(result)
+
+
+def killproc(p):
+    p.terminate()
 
 
 def timed(func, args=(), kwargs={}, timeout=2, proc=True):
-    with (Pool if proc else ThreadPool)(processes=1) as pool:
-        result = pool.apply_async(run_dill_encoded, (dill.dumps((func, args, kwargs)),))
-        try:
-            return dill.loads(result.get(timeout))
-        except TimeoutError as e:
-            pool.terminate()
-            raise Exception("Took more than %s seconds" % timeout)
-        except MemoryError as e:
-            raise MemoryError("proccess ran out of memory")
+    p1, p2 = Pipe()
+    p = Process(target=run_procced, args=(p2, func, args, kwargs))
+    p.start()
+    try:
+        if p1.poll(timeout=timeout):
+            return p1.recv()
+        else:
+            raise TimeoutError
+    except TimeoutError as e:
+        pk = Process(target=killproc, args=(p,))
+        pk.start()
+
+        raise Exception("Took more than %s seconds" % timeout)
+    except MemoryError as e:
+        raise MemoryError("proccess ran out of memory")
 
 
 def _plugin__init__(self, bot):
