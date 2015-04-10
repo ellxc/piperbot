@@ -1,6 +1,6 @@
 import ast
 from collections import OrderedDict, ChainMap
-
+from itertools import chain
 
 def and_(args):
     for x in iter(args):
@@ -59,7 +59,7 @@ exprs = {
     ast.BoolOp: lambda env, op, values: boolops[type(op)](eval_expr(value, env) for value in values),
     ast.BinOp: lambda env, op, left, right: binops[type(op)](eval_expr(left, env), eval_expr(right, env)),
     ast.UnaryOp: lambda env, op, operand: unaryops[type(op)](eval_expr(operand, env)),
-    ast.Lambda: lambda env, args, body: lambda_(args, body, env),
+    ast.Lambda: lambda env, args, body: Lambda(body, dict(ast.iter_fields(args))),
     ast.IfExp: lambda env, test, body, orelse: eval_expr(body, env) if eval_expr(test, env) else eval_expr(orelse, env),
     ast.Dict: lambda env, keys, values: {eval_expr(key, env):
                                          eval_expr(value, env) for key, value in zip(keys, values)},
@@ -68,6 +68,7 @@ exprs = {
     ast.SetComp: lambda env, elt, generators: {eval_expr(elt, genenv) for genenv in generate(generators, env)},
     ast.DictComp: lambda env, key, value, generators: {eval_expr(key, genenv): eval_expr(value, genenv) for genenv in
                                                        generate(generators, env)},
+    ast.GeneratorExp: lambda env, elt, generators: (eval_expr(elt, genenv) for genenv in generate(generators, env)),
     ast.Compare: lambda env, left, ops, comparators: compare_(left, ops, comparators, env),
     ast.Call: lambda env, func, args, starargs, keywords, kwargs: call_(func, args, starargs, keywords, kwargs, env),
     ast.Num: lambda env, n: n,
@@ -143,16 +144,17 @@ str_exprs = {
     ast.Dict: lambda keys, values: "{" + ", ".join([ast_to_string(key) + ":" +
                                                     ast_to_string(value) for key, value in zip(keys, values)]) + "}",
     ast.Set: lambda elts: "{" + ",".join([ast_to_string(elt) for elt in elts]) + "}",
-    ast.ListComp: lambda elt, generators: raise_([ast.dump(gen) for gen in generators]),
+    ast.ListComp: lambda elt, generators: "[list comp]",  # raise_([ast.dump(gen) for gen in generators]),
     # "[" + ",".join([eval_expr(elt, genenv) for genenv in generate(generators)]) +"]",
-    ast.SetComp: lambda elt, generators: "set comp",
+    ast.SetComp: lambda elt, generators: "{set comp}",
     # {eval_expr(elt, genenv) for genenv in generate(generators, env)},
-    ast.DictComp: lambda key, value, generators: "dict comp",
+    ast.DictComp: lambda key, value, generators: "{dict comp}",
+    ast.GeneratorExp: lambda elt, generators: "(gen exp)",
     # {eval_expr(key, genenv): eval_expr(value, genenv) for genenv in generate(generators, env)},
     ast.Compare: lambda left, ops, comparators: ast_to_string(left) + "".join(
         [str_compares[type(op)] + ast_to_string(compar) for op, compar in zip(ops, comparators)]),
     ast.Call: lambda func, args, starargs, keywords, kwargs:
-    ast_to_string(func) + "(" + ",".join(
+    ast_to_string(func) + "(" + ", ".join(
         (list(map(ast_to_string, args)) if args else []) + (list(map(ast_to_string, starargs)) if starargs else []) + [
             a + "=" + ast_to_string(b) for a, b in [(keyword.arg, keyword.value) for keyword in keywords]]) + ")",
     # + kwargs]),
@@ -161,8 +163,8 @@ str_exprs = {
     ast.Subscript: lambda ctx, value, slice:
     str_slices[type(slice)](value_=value, **dict(ast.iter_fields(slice))),
     ast.Name: lambda ctx, id: id,
-    ast.List: lambda ctx, elts: "[" + ",".join(map(ast_to_string, elts)) + "]",
-    ast.Tuple: lambda ctx, elts: "(" + ",".join([ast_to_string(elt) for elt in elts]) + ")",
+    ast.List: lambda ctx, elts: "[" + ", ".join(map(ast_to_string, elts)) + "]",
+    ast.Tuple: lambda ctx, elts: "(" + ", ".join([ast_to_string(elt) for elt in elts]) + ")",
     ast.NameConstant: lambda value: str(value),
     ast.Attribute: lambda value, attr, ctx: ast_to_string(value) + "." + attr,
 }
@@ -234,31 +236,41 @@ def eval_expr(node, env):
     else:
         return None
 
-
-def lambda_(args, body, env):
-    fields = dict(ast.iter_fields(args))
-    fields['defaults'] = [eval_expr(default, env) for default in args.defaults]
-    if "kwonlyargs" in fields:
-        fields["kw_defaults"] = [eval_expr(kw_default, env) if
-                                 kw_default is not None else None
-                                 for kw_default in args.kw_defaults]
-        fields["kw_defaults_"] = args.kw_defaults
-    return Lambda(body, env, fields)
-
-
 class Lambda():
-    def __init__(self, body, env, fields):
+    def __init__(self, body, fields):
         self.body = body
-        self.env = env
         self.fields = fields
 
-    def __call__(self, *args, **kwargs):
-        return eval_expr(self.body, getenv(funcname="<lambda>", call_args=args, call_kwargs=kwargs,
-                                           env=self.env, **self.fields))
+    def __call__(self, *args, __env__, **kwargs):
+        return eval_expr(self.body, getenv(funcname="<lambda>", env=__env__, call_args=args, call_kwargs=kwargs, **self.fields))
 
     def __repr__(self):
-        return "lambda " + ",".join([x.arg for y in self.fields.values() if y for x in y]) + ": " + ast_to_string(
-            self.body)
+        ret = []
+
+        for x in self.fields["args"][slice(0, (-(len(self.fields["defaults"]))) or len(self.fields["args"]))]:
+            ret.append(x.arg)
+        for x in reversed(["{}={}".format(x.arg, ast_to_string(y)) for x, y in
+                           zip(reversed(self.fields["args"]), reversed(self.fields["defaults"]))]):
+            ret.append(x)
+
+        if self.fields["vararg"] is not None:
+            vararg = "*"+self.fields["vararg"].arg
+            ret.append(vararg)
+
+
+        if self.fields["kwarg"] is not None:
+            kwarg = "**"+self.fields["kwarg"].arg
+            ret.append(kwarg)
+
+        if self.fields["kwonlyargs"]:
+            ret.append("*")
+            for p, d in zip(self.fields["kwonlyargs"], self.fields["kw_defaults"]):
+                if d is not None:
+                    ret.append("{}={}".format(p.arg, ast_to_string(d)))
+                else:
+                    ret.append(p.arg)
+
+        return "lambda " + ", ".join(ret) + ": " + ast_to_string(self.body)
 
 
 def compare_(left, ops, comparators, env):
@@ -275,7 +287,11 @@ def call_(func, args, starargs, keywords, kwargs, env):
     kwargs2 = {keyword.arg: eval_expr(keyword.value, env) for keyword in keywords}
     if kwargs:
         kwargs2.update(eval_expr(kwargs, env))
-    return eval_expr(func, env)(*args2, **kwargs2)
+    func2 = eval_expr(func, env)
+    if isinstance(func2, Lambda):
+        return func2(*args2, __env__=env, **kwargs2)
+    else:
+        return func2(*args2, **kwargs2)
 
 
 def bind_name(id, ctx, rhs, env):
@@ -319,8 +335,8 @@ def generate(gens, env):
                     yield genenv
 
 
-def getenv(funcname, args, vararg, kwarg, defaults, call_args, call_kwargs, env,
-           kwonlyargs=None, kw_defaults=None, kw_defaults_=None):
+def getenv(funcname, args, vararg, kwarg, defaults, call_args, call_kwargs,
+           env, kwonlyargs=None, kw_defaults=None):
     subenv = OrderedDict()
 
     for param, arg in zip(args, call_args):
@@ -340,7 +356,7 @@ def getenv(funcname, args, vararg, kwarg, defaults, call_args, call_kwargs, env,
     for param in args:
         bind(param, None, kwenv)
 
-    kwargsd = []
+    kwargsd = {}
     for key, value in call_kwargs.items():
         if key in subenv:
             raise TypeError("%s() got multiple values for argument '%s'" % key)
@@ -349,19 +365,20 @@ def getenv(funcname, args, vararg, kwarg, defaults, call_args, call_kwargs, env,
         elif key in args:
             subenv[key] = value
         else:
-            kwargsd.append(key)
+            kwargsd[key] = value
     if kwarg:
         subenv[kwarg.arg] = kwargsd
     elif kwargsd:
-        raise TypeError("%s() got an unexpected keyword argument '%s'" % (funcname, kwargsd[0]))
+        raise TypeError("%s() got an unexpected keyword argument '%s'" % (funcname, kwargsd.keys()[0]))
 
     newenv = OrderedDict()
     if not kwonlyargs:
         for param, default in zip(args[::-1], defaults[::-1]):
-            bind(param, default, newenv)
+            bind(param, eval_expr(default, env), newenv)
     else:
-        for param, default in [(p, d) for p, ds, d in zip(kwonlyargs, kw_defaults_, kw_defaults) if ds]:
-            bind(param, default, newenv)
+        for param, default in [(p, d) for p, d in zip(kwonlyargs, kw_defaults)]:
+            if default is not None:
+                bind(param, default, newenv)
     newenv.update(subenv)
     kwmissing = []
     posmissing = []
@@ -383,6 +400,7 @@ def getenv(funcname, args, vararg, kwarg, defaults, call_args, call_kwargs, env,
                          "'%s'" % kwmissing[0] +
                          ((", " + ", ".join(["'%s'" % x for x in kwmissing[1:-1]])) if len(kwmissing) > 2 else "") +
                          (" and '%s'" % kwmissing[-1] if len(kwmissing) > 1 else "")))
+
     for key, value in env.items():
         if key not in newenv:
             newenv[key] = value
