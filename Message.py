@@ -48,17 +48,6 @@ class Message():
         self._text = val
 
 
-    @property
-    def command(self):
-        if self._command == self.ctcp:
-            return "PRIVMSG"
-        else:
-            return self._command
-
-    @command.setter
-    def command(self, val):
-        self._command = val
-
     def to_line(self):
         text = self.text.replace("\r", "").replace("\n", "")
         return "%s %s :%s%s%s" % (
