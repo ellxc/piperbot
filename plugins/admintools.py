@@ -1,5 +1,5 @@
 from wrappers import *
-
+from Message import Message
 
 @plugin(desc="admin commands")
 class AdminTools:
@@ -23,8 +23,6 @@ class AdminTools:
     def delalias(self, message):
         assert len(message.data.split()) == 1
 
-
-
     @command("join", adminonly=True)
     def join(self, message):
         response = message.reply("")
@@ -41,17 +39,14 @@ class AdminTools:
         if len(self.bot.servers) == 0:
             self.bot.shutdown()
 
-    @command("leave", adminonly=True)
+    @command("leave")
     def leave(self, message):
-        response = message.reply("")
-        response.command = "PART"
-        if message.text.strip():
+        if message.text.strip() and message.text.split():
             for channel in message.text.split():
                 if channel and channel[0] in "#&!+":
-                    response.params = channel
-                    yield response
+                    yield Message(server=message.server, params=channel, command="PART", text="cya!")
         else:
-            yield response
+            yield Message(server=message.server, params=message.params, command="PART", text="cya!")
 
     @command("load", adminonly=True)
     def load(self, message):

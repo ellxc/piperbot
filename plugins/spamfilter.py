@@ -16,28 +16,30 @@ class spamfilter:
     def __init__(self):
         self.spamlimit = 3
         self.pmspamlimit = 3
-        self.bots = ["Gwyn", "CirnoX", "Kuddle_Kitty", "cake"]
+        self.bots = ["Gwyn", "CirnoX", "Kuddle_Kitty", "cake", "kentpet"]
         self.spams = defaultdict(lambda: defaultdict(lambda: False))
 
 
-    @extension(priority=997, type=extensiontype.command)
-    @extension(priority=997, type=extensiontype.regex)
-    @extension(priority=997, type=extensiontype.event)
-    @extension(priority=997, type=extensiontype.trigger)
+    @adv_extension(priority=997, type=extensiontype.command)
+    @adv_extension(priority=997, type=extensiontype.regex)
+    @adv_extension(priority=997, type=extensiontype.event)
+    @adv_extension(priority=997, type=extensiontype.trigger)
     def spamcheck(self, orginal, target):
         time = datetime.now()
         try:
             while 1:
                 message = yield
-                if message.command in ["PRIVMSG", "ACTION", "NOTICE"]:
-                    if self.spams[message.server][message.params]:
-                        if time - self.spams[message.server][message.params] < timedelta(seconds=30):
-                            continue
-                target.send(message)
+                print(message)
+                if message is not None:
+                    if message.command in ["PRIVMSG", "ACTION", "NOTICE"]:
+                        if self.spams[message.server][message.params]:
+                            if time - self.spams[message.server][message.params] < timedelta(seconds=30):
+                                continue
+                    target.send(message)
         except GeneratorExit:
             target.close()
 
-    @command("spam", simple=True)
+    @command("spam")
     def stopspam(self, message):
         yield message.reply("sorry, I will be quiet for a while")
         self.spams[message.server][message.params] = datetime.now()
@@ -50,7 +52,7 @@ class spamfilter:
         else:
             return message
 
-    @extension(priority=999,type=extensiontype.command)
+    @adv_extension(priority=999,type=extensiontype.command)
     def spamfilter(self, original, target):
         spams = defaultdict(lambda: defaultdict(list))
         try:
@@ -83,4 +85,4 @@ class spamfilter:
         if message.command in ["PRIVMSG", "ACTION", "NOTICE"]:
             if len(bytearray(message.text.encode('utf-8'))) > 550:
                 message.text = "message too large, here is the output: " + urllib.request.urlopen(urllib.request.Request('http://sprunge.us', urllib.parse.urlencode({'sprunge': message.text}).encode('utf-8'))).read().decode()
-            return message
+        return message

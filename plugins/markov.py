@@ -99,7 +99,7 @@ class markov:
 
     @trigger(lambda message, bot: message.command == "PRIVMSG"
              and bot.servers[message.server].nick in message.text
-             and message.nick not in ["Gwyn", "CirnoX", "Kuddle_Kitty"])
+             and message.nick not in ["Gwyn", "CirnoX", "Kuddle_Kitty", "cake", "kentpet"])
     def mention(self, message):
         if message.text.startswith(self.bot.servers[message.server].nick + ":"):
             try:

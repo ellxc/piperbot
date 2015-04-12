@@ -69,6 +69,11 @@ class general():
         "turns the message into camel case"
         return message.reply(message.data.title())
 
+    @command
+    def action(self, message):
+        ret = message.copy()
+        ret.ctcp = "ACTION"
+        return ret
 
 
 
@@ -105,7 +110,7 @@ class general():
 
         return message.reply(lines, "captured %s lines!" % count)
 
-    @command
+    @adv_command
     def sprunge(self, arg, target):
         """redirect output to a sprunge and return the link"""
         lines = []
