@@ -288,7 +288,6 @@ class url:
                     return message.reply(data, text)
 
             head = requests.head(link, timeout=5)
-            print(head.status_code)
             contentstats = ""
             if "content-type" in head.headers:
                 contentstats += head.headers["content-type"]
