@@ -220,7 +220,7 @@ def eval_assign(node, env):
             elif isinstance(x.slice, ast.Slice):
                 eval_expr(x.value, env)[slice(eval_expr(x.slice.lower, env), eval_expr(x.slice.upper, env), eval_expr(x.slice.step, env))] = val
         else:
-            raise Exception(ast.dump(x))
+            bind(x, val, env)
     return env
 
 
@@ -241,7 +241,7 @@ class Lambda():
         self.body = body
         self.fields = fields
 
-    def __call__(self, *args, __env__, **kwargs):
+    def __call__(self, *args, __env__={}, **kwargs):
         return eval_expr(self.body, getenv(funcname="<lambda>", env=__env__, call_args=args, call_kwargs=kwargs, **self.fields))
 
     def __repr__(self):
@@ -270,7 +270,7 @@ class Lambda():
                 else:
                     ret.append(p.arg)
 
-        return "lambda " + ", ".join(ret) + ": " + ast_to_string(self.body)
+        return "<lambda " + ", ".join(ret) + ": " + ast_to_string(self.body) + ">"
 
 
 def compare_(left, ops, comparators, env):

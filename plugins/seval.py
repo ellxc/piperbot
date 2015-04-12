@@ -1,13 +1,14 @@
 import ast
 from wrappers import *
 from plugins.stuff.seval import seval
-from collections import defaultdict
+from collections import defaultdict, Counter
 import math
 import datetime
 import json
 import random
 import sys
 import pytz
+from functools import partial
 
 @plugin
 class Eval:
@@ -140,7 +141,7 @@ globalenv = {
     "tuple": tuple,
     "type": type,
     "zip": zip,
-
+    "Counter":Counter,
     "json":json,
     "sin": math.sin,
     "pi": math.pi,
@@ -164,7 +165,9 @@ def sevalcall(text, localenv, message):
 
     env.update(globalenv)
 
+
     env.update(message=message)
+    env.update(seval=seval_)
 
     responses = seval(text, env)
 
@@ -173,3 +176,8 @@ def sevalcall(text, localenv, message):
             localenv[key] = item
 
     return responses, localenv#, self
+
+def seval_(text, env={}):
+    tempenv = globalenv.copy()
+    tempenv.update(env)
+    return seval(text, tempenv)
