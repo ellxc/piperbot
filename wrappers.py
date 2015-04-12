@@ -6,6 +6,8 @@ import string
 from enum import IntEnum
 import os
 from multiprocessing import Process, Pipe
+from scheduler import Task
+from functools import partial
 
 
 def plugin(desc=None, thread=False):
@@ -99,10 +101,13 @@ def command(name=None, **kwargs):
                             else:
                                 x = func(self, line.reply(line.data, args=arg.args))
                         if x is not None:
+                            print(target)
                             if inspect.isgenerator(x):
                                 for y in x:
+                                    print(y)
                                     target.send(y)
                             else:
+                                print(x)
                                 target.send(x)
                 except GeneratorExit:
                     if target is not None:
@@ -125,7 +130,7 @@ class extensiontype(IntEnum):
     event = 3
     regex = 4
 
-def extension(priority=1, simple=False, type=1, **kwargs):
+def extension(priority=1, type=1):
     def _coroutine(func):
 
         if hasattr(func, "_extensions"):
@@ -135,40 +140,49 @@ def extension(priority=1, simple=False, type=1, **kwargs):
         func._extensions = []
         func._extensions.append((priority, type))
 
-        if inspect.isgeneratorfunction(func) and not simple:
-            @functools.wraps(func)
-            def generator(self, original, target):
-                x = func(self, original, target)
-                next(x)
-                return x
+        @functools.wraps(func)
+        def generator(self, original, target):
+            def inner(target):
+                try:
+                    while True:
+                        line = yield
+                        if line is not None:
+                            x = func(self, line)
+                            if inspect.isgenerator(x):
+                                for y in x:
+                                    target.send(y)
+                            else:
+                                target.send(x)
+                except GeneratorExit:
+                    target.close()
 
-            return generator
-        else:
-            @functools.wraps(func)
-            def generator(self, original, target):
-                def inner(target):
-                    try:
-                        while True:
-                            line = yield
-                            if line is not None:
-                                x = func(self, line)
-                                if inspect.isgenerator(x):
-                                    for y in x:
-                                        target.send(y)
-                                else:
-                                    target.send(x)
-                    except GeneratorExit:
-                        target.close()
+            ret = inner(target)
+            next(ret)
+            return ret
 
-                ret = inner(target)
-                next(ret)
-                return ret
-
-            return generator
+        return generator
 
     return _coroutine
 
+def adv_extension(priority=1, type=1):
+    def _coroutine(func):
 
+        if hasattr(func, "_extensions"):
+            func._extensions.append((priority, type))
+            return func
+
+        func._extensions = []
+        func._extensions.append((priority, type))
+
+        @functools.wraps(func)
+        def generator(self, original, target):
+            x = func(self, original, target)
+            next(x)
+            return x
+
+        return generator
+
+    return _coroutine
 
 def arg(arg=None, default=False):
     def wrapper(func):
@@ -255,13 +269,20 @@ def trigger(trigger_=None):
 
         return generator
 
-    if not trigger:
+    if trigger is None:
         raise Exception("no trigger specified")
     else:
         return wrapper
 
 
-
+def scheduled(task):
+    assert isinstance(task, Task)
+    def wrapper(func):
+        if not hasattr(func, "_scheduleds"):
+            func._scheduleds = []
+        func._scheduleds.append(task)
+        return func
+    return wrapper
 
 
 def run_procced(p2, fun, args, kwargs):
@@ -308,6 +329,7 @@ def _plugin__init__(self, bot):
     self._commands = []
     self._regexes = []
     self._handlers = []
+    self._scheduleds = []
     self._command_extensions = []
     self._event_extensions = []
     self._trigger_extensions = []
@@ -329,6 +351,9 @@ def _plugin__init__(self, bot):
         if hasattr(func, '_handlers'):
             for event in func._handlers:
                 self._handlers.append((event, func))
+        if hasattr(func, '_scheduleds'):
+            for task in func._scheduleds:
+                self._scheduleds.append(task.do(partial(func)))
         if hasattr(func, '_extensions'):
             for priority, type in func._extensions:
                 if type == extensiontype.command:
