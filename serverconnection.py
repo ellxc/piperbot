@@ -26,6 +26,7 @@ class ServerConnection():
         self.ircname = ircname or nick
         self.password = password
         self.auto_join_channels = auto_join_channels if auto_join_channels else []
+        self.channels = []
 
         self.socket = socket.socket()
         if self.ssl:
