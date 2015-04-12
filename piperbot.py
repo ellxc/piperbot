@@ -17,6 +17,7 @@ from operator import itemgetter
 
 from serverconnection import ServerConnection
 from itertools import chain
+from scheduler import Scheduler
 
 
 class User:
@@ -62,7 +63,9 @@ class PiperBot(threading.Thread):
         self.pre_regex_exts = []
         self.post_regex_exts = []
 
-        self.worker_pool = ThreadPool(processes=8)
+        self.worker_pool = ThreadPool(processes=4)
+        self.scheduler = Scheduler()
+        self.scheduler.start()
 
         self.message_buffer = defaultdict(lambda: defaultdict(lambda: deque(maxlen=50)))
         self.buffer_pattern = re.compile(r"(?:(\w+)|(\s)|^)(?:\^(\d+)|(\^+))")
@@ -173,6 +176,9 @@ class PiperBot(threading.Thread):
             else:
                 print("command overlap! : " + args["command"])
 
+        for task in plugin_instance._scheduleds:
+            self.scheduler.add_task(task)
+
         for (priority, func) in plugin_instance._command_extensions:
             if priority < 1:
                 self.pre_command_exts.append((priority,
@@ -226,6 +232,8 @@ class PiperBot(threading.Thread):
         for func, args in self.plugins[plugin_name]._commands:
             if args["command"] in self.commands.keys():
                 del self.commands[args["command"]]
+        for task in self.plugins[plugin_name]._scheduleds:
+            self.scheduler.cancel_task(task)
         for lump in self.post_command_exts:
             if lump[1] == plugin_name:
                 self.post_command_exts.remove(lump)
