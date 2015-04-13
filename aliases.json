@@ -1,18 +1,4 @@
 {
-    "36forecast": [
-        [
-            "condition",
-            "{}"
-        ],
-        [
-            ">",
-            "\"Weather from \" + datetime.fromtimestamp(int(message.data['hourly']['data'][36]['time'])).strftime(\"%A %d %B %H:%M\") + \" \" +  \"; \".join([\"{0[summary]} {0[windSpeed]}mph bearing {0[windBearing]:03d}deg\".format(x) for x in message.data['hourly']['data'][36:]])"
-        ],
-        [
-            "echo",
-            ""
-        ]
-    ],
     "?": [
         [
             "help",
