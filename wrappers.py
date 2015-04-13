@@ -1,12 +1,13 @@
 import re
-from multiprocessing import Pool
-from multiprocessing.pool import ThreadPool
 from multiprocessing import TimeoutError
 import functools
 import inspect
 import string
 from enum import IntEnum
-import dill
+import os
+from multiprocessing import Process, Pipe
+from scheduler import Task
+from functools import partial
 
 
 def plugin(desc=None, thread=False):
@@ -35,7 +36,35 @@ def on_unload(func):
     return func
 
 
-def command(name=None, simple=False, **kwargs):
+def adv_command(name=None, **kwargs):
+    def _coroutine(func):
+        if hasattr(func, '_commands'):
+            func._commands.append(dict(kwargs,
+                                       command=name
+                                       if not inspect.isfunction(name) and name is not None
+                                       else func.__name__))
+            return func
+
+        func._commands = []
+        func2 = dict(kwargs, command=name if not inspect.isfunction(name) and name is not None else func.__name__)
+        func._commands.append(func2)
+
+
+        @functools.wraps(func)
+        def generator(self, args, target):
+            x = func(self, args, target)
+            next(x)
+            return x
+
+        return generator
+
+    if inspect.isfunction(name):
+        return _coroutine(name)
+    else:
+        return _coroutine
+
+
+def command(name=None, **kwargs):
     def _coroutine(func):
 
         if hasattr(func, '_commands'):
@@ -49,51 +78,46 @@ def command(name=None, simple=False, **kwargs):
         func2 = dict(kwargs, command=name if not inspect.isfunction(name) and name is not None else func.__name__)
         func._commands.append(func2)
 
-        if inspect.isgeneratorfunction(func) and not simple:
-            @functools.wraps(func)
-            def generator(self, args, target):
-                x = func(self, args, target)
-                next(x)
-                return x
 
-            return generator
-        else:
-            @functools.wraps(func)
-            def generator(self, args, target):
-                def inner(target):
-                    arg = args
-                    formats = len(list(string.Formatter().parse(arg.data)))
-                    try:
-                        while True:
-                            line = yield
-                            if line is None:
-                                if formats:
-                                    x = func(self, arg.reply(arg.data.format(*([""] * formats)), args=arg.args))
-                                else:
-                                    x = func(self, arg)
+        @functools.wraps(func)
+        def generator(self, args, target):
+            def inner(target):
+                arg = args
+                formats = len(list(string.Formatter().parse(arg.data)))
+                try:
+                    while True:
+                        line = yield
+                        if line is None:
+                            if formats:
+                                x = func(self, arg.reply(arg.data.format(*([""] * formats)), args=arg.args))
                             else:
-                                if formats:
-                                    if line.data is not None:
-                                        x = func(self, line.reply(arg.data.format(*([line.data] * formats)), args=arg.args))
-                                    else:
-                                        x = func(self, line.reply(arg.data.format(*([""] * formats)), args=arg.args))
+                                x = func(self, arg)
+                        else:
+                            if formats:
+                                if line.data is not None:
+                                    x = func(self, line.reply(arg.data.format(*([line.data] * formats)), args=arg.args))
                                 else:
-                                    x = func(self, line.reply(line.data, args=arg.args))
-                            if x is not None:
-                                if inspect.isgenerator(x):
-                                    for y in x:
-                                        target.send(y)
-                                else:
-                                    target.send(x)
-                    except GeneratorExit:
-                        if target is not None:
-                            target.close()
+                                    x = func(self, line.reply(arg.data.format(*([""] * formats)), args=arg.args))
+                            else:
+                                x = func(self, line.reply(line.data, args=arg.args))
+                        if x is not None:
+                            print(target)
+                            if inspect.isgenerator(x):
+                                for y in x:
+                                    print(y)
+                                    target.send(y)
+                            else:
+                                print(x)
+                                target.send(x)
+                except GeneratorExit:
+                    if target is not None:
+                        target.close()
 
-                ret = inner(target)
-                next(ret)
-                return ret
+            ret = inner(target)
+            next(ret)
+            return ret
 
-            return generator
+        return generator
 
     if inspect.isfunction(name):
         return _coroutine(name)
@@ -106,7 +130,7 @@ class extensiontype(IntEnum):
     event = 3
     regex = 4
 
-def extension(priority=1, simple=False, type=1, **kwargs):
+def extension(priority=1, type=1):
     def _coroutine(func):
 
         if hasattr(func, "_extensions"):
@@ -116,40 +140,49 @@ def extension(priority=1, simple=False, type=1, **kwargs):
         func._extensions = []
         func._extensions.append((priority, type))
 
-        if inspect.isgeneratorfunction(func) and not simple:
-            @functools.wraps(func)
-            def generator(self, original, target):
-                x = func(self, original, target)
-                next(x)
-                return x
+        @functools.wraps(func)
+        def generator(self, original, target):
+            def inner(target):
+                try:
+                    while True:
+                        line = yield
+                        if line is not None:
+                            x = func(self, line)
+                            if inspect.isgenerator(x):
+                                for y in x:
+                                    target.send(y)
+                            else:
+                                target.send(x)
+                except GeneratorExit:
+                    target.close()
 
-            return generator
-        else:
-            @functools.wraps(func)
-            def generator(self, original, target):
-                def inner(target):
-                    try:
-                        while True:
-                            line = yield
-                            if line is not None:
-                                x = func(self, line)
-                                if inspect.isgenerator(x):
-                                    for y in x:
-                                        target.send(y)
-                                else:
-                                    target.send(x)
-                    except GeneratorExit:
-                        target.close()
+            ret = inner(target)
+            next(ret)
+            return ret
 
-                ret = inner(target)
-                next(ret)
-                return ret
-
-            return generator
+        return generator
 
     return _coroutine
 
+def adv_extension(priority=1, type=1):
+    def _coroutine(func):
 
+        if hasattr(func, "_extensions"):
+            func._extensions.append((priority, type))
+            return func
+
+        func._extensions = []
+        func._extensions.append((priority, type))
+
+        @functools.wraps(func)
+        def generator(self, original, target):
+            x = func(self, original, target)
+            next(x)
+            return x
+
+        return generator
+
+    return _coroutine
 
 def arg(arg=None, default=False):
     def wrapper(func):
@@ -236,29 +269,56 @@ def trigger(trigger_=None):
 
         return generator
 
-    if not trigger:
+    if trigger is None:
         raise Exception("no trigger specified")
     else:
         return wrapper
 
 
+def scheduled(task):
+    assert isinstance(task, Task)
+    def wrapper(func):
+        if not hasattr(func, "_scheduleds"):
+            func._scheduleds = []
+        func._scheduleds.append(task)
+        return func
+    return wrapper
 
 
+def run_procced(p2, fun, args, kwargs):
+    os.nice(20)
+    try:
+        result = fun(*args, **kwargs)
+        print(result, file=open(os.devnull, "w"))  # hack hack hack
+        p2.send(result)
+    except Exception as e:
+        p2.send(e)
 
-def run_dill_encoded(what):
-    fun, args, kwargs = dill.loads(what)
-    result = dill.dumps(fun(*args, **kwargs))
-    return result
+
+def killproc(p):
+    p.terminate()
 
 
 def timed(func, args=(), kwargs={}, timeout=2, proc=True):
-    with (Pool if proc else ThreadPool)(processes=1) as pool:
-        result = pool.apply_async(run_dill_encoded, (dill.dumps((func, args, kwargs)),))
-        try:
-            return dill.loads(result.get(timeout))
-        except TimeoutError as e:
-            pool.terminate()
-            raise Exception("Took more than %s seconds" % timeout)
+    p1, p2 = Pipe()
+    p = Process(target=run_procced, args=(p2, func, args, kwargs))
+    p.start()
+    try:
+        if p1.poll(timeout=timeout):
+            result = p1.recv()
+            if isinstance(result, Exception):
+                raise result
+            else:
+                return result
+        else:
+            raise TimeoutError
+    except TimeoutError as e:
+        pk = Process(target=killproc, args=(p,))
+        pk.start()
+
+        raise Exception("Took more than %s seconds" % timeout)
+    except MemoryError as e:
+        raise MemoryError("proccess ran out of memory")
 
 
 def _plugin__init__(self, bot):
@@ -269,6 +329,7 @@ def _plugin__init__(self, bot):
     self._commands = []
     self._regexes = []
     self._handlers = []
+    self._scheduleds = []
     self._command_extensions = []
     self._event_extensions = []
     self._trigger_extensions = []
@@ -290,6 +351,9 @@ def _plugin__init__(self, bot):
         if hasattr(func, '_handlers'):
             for event in func._handlers:
                 self._handlers.append((event, func))
+        if hasattr(func, '_scheduleds'):
+            for task in func._scheduleds:
+                self._scheduleds.append(task.do(partial(func)))
         if hasattr(func, '_extensions'):
             for priority, type in func._extensions:
                 if type == extensiontype.command:

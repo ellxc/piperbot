@@ -4,8 +4,8 @@ import datetime
 from wrappers import *
 from Message import Message
 from dateutil import parser
-import pymongo
-import dill
+import json
+from scheduler import Task
 
 
 units = {
@@ -75,31 +75,32 @@ quants = {
 }
 
 
-@plugin(thread=True)
-class Reminders(Thread):
+@plugin()
+class Reminders():
     def __init__(self):
-        super(Reminders, self).__init__()
         self.reminders = []
-        self.event = Event()
-        self.ticking = False
 
     @on_load
     def init(self):
-        con = pymongo.MongoClient()
-        db = con["reminders"]
-        for reminder_ in db["reminders"].find():
-            self.reminders.append(dill.loads(reminder_["reminder"]))
-        self.reminders.sort()
-        db.reminders.remove({})
+        try:
+            with open('reminders.json', 'r') as infile:
+                rems = json.load(infile)
+                for rem in rems:
+                    reminder = Reminder.from_dict(rem)
+                    def sendmsg():
+                        self.bot.send(reminder.to_message())
+                        self.reminders.remove(reminder)
+
+                    self.bot.scheduler.add_task(reminder.get_task().do(sendmsg))
+                    self.reminders.append(reminder)
+            self.reminders.sort()
+        except FileNotFoundError:
+            pass
 
     @on_unload
     def stop(self):
-        self.ticking = False
-        self.event.set()
-        con = pymongo.MongoClient()
-        db = con["reminders"]
-        for reminder in self.reminders:
-            db["reminders"].insert({"reminder": dill.dumps(reminder)})
+        with open('reminders.json', 'w') as outfile:
+            json.dump([x.to_dict() for x in self.reminders], outfile, sort_keys=True, indent=4, ensure_ascii=False)
 
     @command("date")
     def parse(self, message):
@@ -108,7 +109,6 @@ class Reminders(Thread):
             date = parser.parse(message.text, fuzzy=True)
         else:
             date = datetime.datetime.now()
-        # date = datetime_(date.year,date.month,date.day,date.hour,date.minute,date.second,date.microsecond,date.tzinfo)
         return message.reply(date)
 
     @command("reminds")
@@ -117,14 +117,14 @@ class Reminders(Thread):
         reminders = []
         for reminder_ in self.reminders:
             if message.nick == reminder_.set_for:
-                reminders.append(reminder_)
+                reminders.append(reminder_.to_dict())
         text = "you have %s reminders!"
         count = len(reminders)
 
         text %= count
         return message.reply(reminders, text)
 
-    @command
+    @adv_command
     def remind(self, arg, target):
         """ remind <target> (in|at|on) (quantiy unit|datetime) to (message) -> sets a reminder, also accepts a piped in datetime, timedelta or string objects
         :param message:
@@ -175,7 +175,7 @@ class Reminders(Thread):
                         if setfor == "me":
                             setfor = message.nick
 
-                        settext = msg or arg.data
+                        settext = msg or ""
                         responsetext = "reminder set to go in %s!" % str(datetime.timedelta(seconds=total))
                     elif message.text.split()[1:2] == ["at"] or message.text.split()[1:2] == ["on"]:
                         date, *msg = message.text[3:].split("to ")
@@ -185,7 +185,7 @@ class Reminders(Thread):
                         if setfor == "me":
                             setfor = message.nick
 
-                        settext = msg or arg.data
+                        settext = msg or ""
                         responsetext = "reminder set for %s!" % str(settime)
                     else:
                         try:
@@ -197,12 +197,19 @@ class Reminders(Thread):
                                                       % self.bot.command_char))
                             continue
 
-                self.reminders.append(reminder(arg.nick, setfor, datetime.datetime.today(),
+
+                reminder = Reminder(arg.nick, setfor, datetime.datetime.today(),
                                                settime, settext,
                                                message.params,
-                                               message.server))
-                self.reminders.sort()
-                self.event.set()
+                                               message.server)
+
+                def sendmsg():
+                    self.bot.send(reminder.to_message())
+                    self.reminders.remove(reminder)
+
+                self.bot.scheduler.add_task(reminder.get_task().do(sendmsg))
+
+                self.reminders.append(reminder)
                 target.send(message.reply(data=settime, text=responsetext))
         except GeneratorExit:
             target.close()
@@ -227,7 +234,7 @@ class Reminders(Thread):
                 self.event.clear()
 
 
-class reminder:
+class Reminder:
     def __init__(self, set_by, set_for, set_time, due_time, message, channel, server):
         self.set_by = set_by
         self.set_for = set_for
@@ -236,6 +243,7 @@ class reminder:
         self.message = message
         self.channel = channel
         self.server = server
+        self.task = None
 
     def to_message(self):
         text = self.set_for + ": "
@@ -248,6 +256,38 @@ class reminder:
         else:
             text += "!"
         return Message(server=self.server, command="PRIVMSG", params=self.channel, text=text)
+
+    def get_task(self):
+        self.task = Task()
+        self.task.start_date = self.due_time.date()
+        self.task.start_time = self.due_time.time()
+        return self.task
+
+    @classmethod
+    def from_dict(cls, data):
+        assert isinstance(data, dict)
+
+        set_by = data.get("set_by", "???")
+        set_for = data.get("set_for", "???")
+        set_time = parser.parse(data.get("set_time"))
+        due_time = parser.parse(data.get("due_time"))
+        msg = data.get("msg","")
+        channel = data.get("channel")
+        server = data.get("server")
+
+        return Reminder(set_by, set_for, set_time, due_time, msg, channel, server)
+
+    def to_dict(self):
+        return {
+            "set_by": self.set_by,
+            "set_for": self.set_for,
+            "set_time": str(self.set_time),
+            "due_time": str(self.due_time),
+            "msg": self.message,
+            "channel": self.channel,
+            "server": self.server
+        }
+
 
     def __lt__(self, other):
         try:

@@ -1,7 +1,7 @@
 from collections import Counter
 
 from wrappers import *
-import pymongo
+import json
 
 
 @plugin
@@ -11,19 +11,20 @@ class Karma:
 
     @on_load
     def onload(self):
-        con = pymongo.MongoClient()
-        db = con.karma
-        for record in db["karma"].find():
-            self.karma[record["key"]] = record["score"]
+        try:
+            with open('karma.json', 'r') as infile:
+                aliases = json.load(infile)
+                for name, score in aliases.items():
+                    self.karma[name] = score
+        except FileNotFoundError:
+            pass
 
     @on_unload
     def onunload(self):
-        con = pymongo.MongoClient()
-        db = con.karma
-        for key, score in self.karma.items():
-            db.karma.insert({"key": key, "score": score})
+        with open('karma.json', 'w') as outfile:
+            json.dump(self.karma, outfile, sort_keys=True, indent=4, ensure_ascii=False)
 
-    @regex(r"(?:\[([^\[\]]+)\]|(\S+))(\+\+|--)")
+    @regex(r"(?:(\S+): |(\S+))(\+\+|--)")
     def mod(self, message):
         if message.nick != (message.groups[0] or message.groups[1]):
             self.karma[(message.groups[0] or message.groups[1]).lower()] += {"++": 1, "--": -1}[message.groups[2]]

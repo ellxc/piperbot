@@ -1,0 +1,224 @@
+{
+    "36forecast": [
+        [
+            "condition",
+            "{}"
+        ],
+        [
+            ">",
+            "\"Weather from \" + datetime.fromtimestamp(int(message.data['hourly']['data'][36]['time'])).strftime(\"%A %d %B %H:%M\") + \" \" +  \"; \".join([\"{0[summary]} {0[windSpeed]}mph bearing {0[windBearing]:03d}deg\".format(x) for x in message.data['hourly']['data'][36:]])"
+        ],
+        [
+            "echo",
+            ""
+        ]
+    ],
+    "?": [
+        [
+            "help",
+            "{}"
+        ]
+    ],
+    "biaschoice": [
+        [
+            "split",
+            "\" or \""
+        ],
+        [
+            ">",
+            "message.data[0]"
+        ]
+    ],
+    "choose": [
+        [
+            "split",
+            "\" or \""
+        ],
+        [
+            ">",
+            "random.choice(message.data)"
+        ],
+        [
+            "echo",
+            "I CHOOSE: {}"
+        ]
+    ],
+    "garry": [
+        [
+            "echo",
+            "ᕕ( ᐛ )ᕗ"
+        ]
+    ],
+    "i": [
+        [
+            "sed",
+            "s/([aiue])/\\1/i"
+        ],
+        [
+            "sed",
+            "s/[aoue]/i/g"
+        ],
+        [
+            "sed",
+            "s/[AOUE]/I/g"
+        ]
+    ],
+    "include": [
+        [
+            "echo",
+            "lol C"
+        ]
+    ],
+    "karmagraph": [
+        [
+            "nicks",
+            ""
+        ],
+        [
+            ">",
+            "message.data + [\"Pengwin\",\"C\"]"
+        ],
+        [
+            "karma",
+            ""
+        ],
+        [
+            "filter",
+            "message.data[1] != 0"
+        ],
+        [
+            ">",
+            "{\"d\":json.dumps(sorted(message.data,reverse=True,key=lambda x: x[1]))}"
+        ],
+        [
+            "burl",
+            "https://graymalk.in/ircstats/karma-graph.html?"
+        ],
+        [
+            "shurl",
+            ""
+        ]
+    ],
+    "karmalen": [
+        [
+            ">",
+            "a=int(message.data); \"\""
+        ],
+        [
+            "nicks",
+            ""
+        ],
+        [
+            "karma",
+            ""
+        ],
+        [
+            "filter",
+            "message.data[1] != 0"
+        ],
+        [
+            "cat",
+            ""
+        ],
+        [
+            ">",
+            "{\"d\":json.dumps(sorted(message.data,key=lambda x: x[1],reverse=True)[a:])}"
+        ],
+        [
+            "burl",
+            "https://graymalk.in/ircstats/karma-graph.html?"
+        ],
+        [
+            "shurl",
+            ""
+        ]
+    ],
+    "karmasquare": [
+        [
+            "nicks",
+            ""
+        ],
+        [
+            "karma",
+            ""
+        ],
+        [
+            "filter",
+            "message.data[1] != 0"
+        ],
+        [
+            "cat",
+            ""
+        ],
+        [
+            ">",
+            "{\"d\":json.dumps(sorted(message.data,key=lambda x: x[1],reverse=True))}"
+        ],
+        [
+            "burl",
+            "https://graymalk.in/ircstats/karma-square.html?"
+        ],
+        [
+            "shurl",
+            ""
+        ]
+    ],
+    "ning": [
+        [
+            "echo",
+            "{}"
+        ],
+        [
+            ">",
+            "hour = datetime.now().hour; (\"Morn\" if hour < 12 else \"Afternoon\" if hour < 18 else \"Even\")+\"ing\" + ((\" \"+message.data) if message.data else \"\")+\".\""
+        ],
+        [
+            "echo",
+            ""
+        ]
+    ],
+    "o": [
+        [
+            "sed",
+            "s/([aiue])/\\1/i"
+        ],
+        [
+            "sed",
+            "s/[aiue]/o/g"
+        ],
+        [
+            "sed",
+            "s/[AIUE]/O/g"
+        ]
+    ],
+    "pizza": [
+        [
+            "remind",
+            "me in 14 min"
+        ]
+    ],
+    "talklots": [
+        [
+            "repeat",
+            "100 {}"
+        ],
+        [
+            "talk",
+            "about {}"
+        ],
+        [
+            "sprunge",
+            ""
+        ]
+    ],
+    "tweather": [
+        [
+            "forecast",
+            "{}"
+        ],
+        [
+            ">",
+            "\"{0[day]}'s weather: {0[condition]}, high: {0[high]}, low: {0[low]}\".format(message.data[1])"
+        ]
+    ]
+}

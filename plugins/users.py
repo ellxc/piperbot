@@ -52,7 +52,7 @@ class Users:
             return message.reply("I see you in these channels: " +
                                 ", ".join(self.bot.users[message.server][message.nick].channels[message.server]))
 
-    @command("nicks", simple=True)
+    @command("nicks")
     def nicks(self, message):
         nicks = [nick for nick, user in self.bot.users[message.server].items() if message.params in user.channels[message.server]]
         yield message.reply(data=nicks, text=" ".join(nicks))

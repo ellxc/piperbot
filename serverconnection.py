@@ -24,6 +24,7 @@ class ServerConnection():
         self.ircname = ircname or nick
         self.password = password
         self.auto_join_channels = auto_join_channels if auto_join_channels else []
+        self.channels = []
 
         self.socket = socket.socket()
         if self.ssl:
@@ -91,8 +92,11 @@ class ServerConnection():
 
 
     def disconnect(self, message=""):
-        self.socket.send(('QUIT :' + message + '\r\n').encode())
-        self.socket.close()
+        try:
+            self.socket.send(('QUIT :' + message + '\r\n').encode())
+            self.socket.close()
+        except BrokenPipeError:
+            pass  # assume socket closed
         self.connected = False
 
 

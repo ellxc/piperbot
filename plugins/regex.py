@@ -51,7 +51,7 @@ class regexes:
         return result
 
 
-    @command("sed")
+    @adv_command("sed")
     def sedc(self, arg, target):
         """sed s/find/replace/flags [text] -> accepts piped in text, or if no text is found it will search the previous messages for a match"""
         match = self.sedcommand.search(arg.text)
@@ -107,7 +107,7 @@ class regexes:
 
         return result
 
-    @command("grep")
+    @adv_command("grep")
     def regex(self, arg, target):
         reg, flags, ftext = self.grepcommand.match(arg.text).groups()
         if reg:
@@ -129,8 +129,13 @@ class regexes:
                         if not found:
                             raise Exception("no messages found")
                     else:
-                        if timed(lambda: bool(reg.search(x.text))):
-                            target.send(x)
+                        if isinstance(x.data, str):
+                            if timed(lambda: bool(reg.search(x.data))):
+                                target.send(x)
+                        elif hasattr(x.data, '__iter__'):
+                            for y in x:
+                                if timed(lambda: bool(reg.search(y))):
+                                    target.send(x.reply(y))
             while 1:
                 x = yield
                 if x is None:

@@ -48,21 +48,10 @@ class Message():
         self._text = val
 
 
-    @property
-    def command(self):
-        if self._command == self.ctcp:
-            return "PRIVMSG"
-        else:
-            return self._command
-
-    @command.setter
-    def command(self, val):
-        self._command = val
-
     def to_line(self):
         text = self.text.replace("\r", "").replace("\n", "")
         return "%s %s :%s%s%s" % (
-            self.command, self.params, ("\001%s " % self.ctcp if self.ctcp else ""), text,
+            self.command, self.params, ("\001%s " % self.ctcp if self.ctcp else ""), bytes(self.text, "utf-8")[:550].decode(),
             ("\001" if self.ctcp else ""))
 
     def to_pretty(self):
@@ -92,7 +81,7 @@ class Message():
                                           (" <" + self.nick + "(" + self.user + ("@" if self.user else "")
                                            + self.domain + ")>")
                                           if self.domain else "", self.ctcp if self.ctcp else self.command,
-                                          self.params, self.text)
+                                          self.params, bytes(self.text, "utf-8")[:550].decode())
 
 
     @staticmethod

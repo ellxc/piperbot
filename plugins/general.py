@@ -1,15 +1,15 @@
 import codecs
 import urllib.request
 import urllib.parse
-import pymongo
 from wrappers import *
+import json
 
 
 @plugin(desc="general")
 class general():
     itersplit = re.compile(r'"([^"]*)"|([^ ]+)')
 
-    @command  # (groups="^(\S+)?$")
+    @adv_command
     def pm(self, arg, target):
         """redirects the output to a private message"""
         try:
@@ -23,7 +23,7 @@ class general():
             target.close()
 
 
-    @command("repeat", simple=True)
+    @command("repeat")
     def rep(self, message):
         cnt, *msg = message.text.split()
         cnt = int(cnt)
@@ -32,15 +32,16 @@ class general():
         for i in range(int(cnt)):
             yield message.reply(" ".join(msg))
 
-    @command("iterate", simple=True)
+    @command("for")
+    @command("iterate")
     def iter(self, message):
         for x in message.data:
             yield message.reply(x)
 
     @command("reverse")
     def reverse(self, message):
-        "reverse the message's text"
-        return message.reply(message.text[::-1])
+        "reverse the message"
+        return message.reply(message.data[::-1])
 
     @command("echo")
     def echo(self, message):
@@ -68,40 +69,20 @@ class general():
         "turns the message into camel case"
         return message.reply(message.data.title())
 
-    @command("list")
-    def list(self, message):
-        "list the loaded plugins"
-        return message.reply(list(self.bot.plugins.keys()), "loaded plugins : " + ", ".join(self.bot.plugins.keys()))
+    @command
+    def action(self, message):
+        ret = message.copy()
+        ret.ctcp = "ACTION"
+        return ret
 
-    @command("help", simple=True)
-    def help(self, message):
-        """help <command>   -> returns the help for the specified command
-           derp derp derp
 
-        """
-        if not isinstance(message.data, str):
-            yield message.reply(
-                text="not yet implemented pydoc look up. this is a %s" % message.data.__class__.__name__)
-        else:
-            try:
-                com = message.data.split()[0]
-                func = self.bot.commands[com][0]
-            except:
-                raise Exception("specifed command not found")
-            doc = func.__doc__
-            if not doc:
-                yield message.reply("No help found for specified command")
-            else:
-                doc = "%s: %s" % (com, doc.split("\n")[0])
-                for doc in doc.split(". "):
-                    yield message.reply(doc)
 
     @command
     def strip(self, message):
         "strip the message of any whitespace"
         return message.reply(message.data.strip())
 
-    @command
+    @adv_command
     def split(self, arg, target):
         splitby = arg.text or " "
         try:
@@ -129,7 +110,7 @@ class general():
 
         return message.reply(lines, "captured %s lines!" % count)
 
-    @command
+    @adv_command
     def sprunge(self, arg, target):
         """redirect output to a sprunge and return the link"""
         lines = []
@@ -150,7 +131,7 @@ class general():
                 target.send(arg.reply(response))
             target.close()
 
-    @command
+    @adv_command
     def cat(self, arg, target):
         """concat all messages to one line joined by arg.text or ' '"""
         data = []
@@ -165,7 +146,8 @@ class general():
             target.send(arg.reply(data))
             target.close()
 
-    @command
+
+    @adv_command
     def wc(self, arg, target):
         count = 0
         try:
@@ -179,36 +161,23 @@ class general():
             target.send(arg.reply(count))
             target.close()
 
-    @command("expand")
-    def expand(self, message):
-        if message.text:
-            command = message.text.split()[0].strip()
-            if command in self.bot.aliases:
-                x = self.bot.aliases[command]
-                x = self.bot.command_char+" || ".join(["%s%s" % (cmd, (" " + arg) if arg else "") for cmd, arg in x])
-                return message.reply(x)
+
 
 
     @on_load
     def alaiasload(self):
-        # Attempt to connect to the database. On failure quit program. We can't do anything without the db
-        # TODO: Attempt to peel the database away from some of the core functionality of the bot.
         try:
-            con = pymongo.MongoClient()
-            db = con.Marvin
-            for record in db["aliases"].find():
-                self.bot.aliases[record["key"]] = record["command"]
-        except Exception as cf:
-            print("Failed to connect to the mongo database.")
-            exit(-1)
+            with open('aliases.json', 'r') as infile:
+                aliases = json.load(infile)
+                for cmd, alias in aliases.items():
+                    self.bot.aliases[cmd] = alias
+        except FileNotFoundError:
+            pass
 
     @on_unload
     def aliassave(self):
-        con = pymongo.MongoClient()
-        db = con.Marvin
-        for key, cmd in self.bot.aliases.items():
-            db.aliases.insert({"key": key, "command": cmd})
-
+        with open('aliases.json', 'w') as outfile:
+            json.dump(self.bot.aliases, outfile, sort_keys=True, indent=4, ensure_ascii=False)
 
     @regex("^.?botsnack")
     def botsnack(self, message):
