@@ -7,30 +7,31 @@ import datetime
 import json
 import random
 import sys
+import traceback
 import pytz
 from functools import partial
+import dateutil.parser
+from Namespaces import *
+import pickle
 
 @plugin
 class Eval:
-        # #@on_load
-        # def init(self):
-        #     con = pymongo.MongoClient()
-        #     db = con["seval"]
-        #     for table in db.collection_names():
-        #         for record in db[table].find({"bin": {"$exists": True}}):
-        #             userenv[table][record["key"]] = pickle.loads(record["bin"])
-        #
-        # #@on_unload
-        # def save(self):
-        #     con = pymongo.MongoClient()
-        #     db = con["seval"]
-        #     for user, space in userenv.items():
-        #         for key, val in space.items():
-        #             db[user].insert({"key": key, "bin": pickle.dumps(val)})
+    @on_load
+    def init(self):
+        try:
+            self.userspaces = pickle.load(open("sevaluserspaces.pickle", "rb"))
+        except FileNotFoundError:
+            pass
+
+    @on_unload
+    def save(self):
+        pickle.dump(self.userspaces, open("sevaluserspaces.pickle", "wb"))
+
 
     def __init__(self):
         self.localenv = {}
-       # self.userspaces = de
+
+        self.userspaces = {}
 
 
     @adv_command(">", bufferreplace=False, argparse=False)
@@ -45,13 +46,35 @@ class Eval:
                 if message is None:
                     message = arg
 
-                responses, env = timed(sevalcall, args=(arg.text.strip(), self.localenv, message))
 
-                for response in responses:
-                    target.send(arg.reply(response, repr(response)))
+                todelete = set(self.localenv.keys())
+                selftodelete = set(self.userspaces.setdefault(message.server, {}).setdefault(message.nick, {}).keys())
+
+                responses, env, self_ = timed(sevalcall, args=(arg.text.strip(), self.localenv, self.userspaces, message))
+
+                if isinstance(responses, list):
+                    for response in responses:
+                        target.send(arg.reply(response, repr(response)))
 
                 for key, item in env.items():
                     self.localenv[key] = item
+                    if key in todelete:
+                        todelete.remove(key)
+
+                for key in todelete:
+                    del self.localenv[key]
+
+                for key, item in self_.items():
+                    self.userspaces[arg.server][arg.nick].update(**{key: item})
+                    if key in selftodelete:
+                        selftodelete.remove(key)
+
+                for key in selftodelete:
+                    del self.userspaces[arg.server][arg.nick][key]
+
+
+                if isinstance(responses, Exception):
+                    raise responses
 
         except GeneratorExit:
             target.close()
@@ -64,8 +87,7 @@ class Eval:
                 if message is None:
                     pass
                 else:
-                    response, *_ = timed(sevalcall, args=(arg.text.strip(), self.localenv, message))
-                    print(response)
+                    response, *_ = timed(sevalcall, args=(arg.text.strip(), self.localenv, self.userspaces, message))
                     if response and response[-1]:
                         target.send(message)
 
@@ -80,21 +102,8 @@ class Eval:
         return message.reply(result, repr(result))
 
 
-class userspace(dict):
-     def __init__(self, *args, **kwargs):
-         super(userspace, self).__init__(*args, **kwargs)
-
-     def __getattr__(self, name):
-         if name not in self:
-             if name.startswith("__"):
-                 return dict.__getattribute__(self, name)
-             else:
-                 self[name] = userspace()
-         return self[name]
-
-     def __setattr__(self, key, value):
-         self[key] = value
-
+def raise_(text=None):
+    raise Exception(text)
 
 globalenv = {
     "abs": abs,
@@ -154,28 +163,45 @@ globalenv = {
     "timestamp": datetime.datetime.fromtimestamp,
     "re": re,
     "pytz": pytz,
+    "dateparse": dateutil.parser.parse,
+    "raise_": raise_,
+    "Exception": Exception,
 }
 
-def sevalcall(text, localenv, message):
-    env = localenv.copy()
 
-   # env.update(userspaces)
-
-
-
-    env.update(globalenv)
+def sevalcall(text, localenv, userspaces, message):
+    ret = {}
+    retenv = localenv.copy()
+    try:
+        env = MutableNameSpace(localenv.copy(), all=True)
 
 
-    env.update(message=message)
-    env.update(seval=seval_)
 
-    responses = seval(text, env)
+        for user, userenv in userspaces[message.server].items():
+            env.update(**{user: ReadOnlyNameSpace(userenv, all=True)})
 
-    for key, item in env.items():
-        if key not in globalenv:
-            localenv[key] = item
+        env.update(servers=ReadOnlyNameSpace(userspaces, all=True))
+        env.update(users=ReadOnlyNameSpace(userspaces[message.server], all=True))
+        env.update(self=MutableNameSpace(userspaces[message.server][message.nick], all=True))
 
-    return responses, localenv#, self
+        env.update(globalenv)
+
+        env.update(message=message)
+        env.update(seval=seval_)
+        #env.update(env=env)
+
+        responses, retenv = seval(text, env)
+
+
+        for key, item in retenv.items():
+            if key not in globalenv and key not in ["self", "users", "servers", "seval", "message"]:
+                ret[key] = item
+        return responses, ret, retenv.setdefault("self", {})
+    except Exception as e:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        print("*** print_tb:")
+        traceback.print_tb(exc_traceback, file=sys.stdout)
+        return e, ret, retenv.setdefault("self", {})
 
 def seval_(text, env={}):
     tempenv = globalenv.copy()
