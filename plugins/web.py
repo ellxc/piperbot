@@ -141,8 +141,6 @@ def amazon(url):
     if noreviews:
         data["noreviews"] = noreviews[0].get_text()
 
-    print(data)
-
     message = "amazon: " + data["title"]+ " " + data["price"] + ((" sold by " + data["solby"]) if data["solby"] else "") +\
               ((data["rating"] + data["noreviews"]) if data["rating"] else "")
 
@@ -150,7 +148,6 @@ def amazon(url):
 
 def imgur(url):
     head = requests.head(url, timeout=5)
-    print(head.headers)
     contentstats = ""
     if not (url.endswith(".gifv") or url.endswith(".gif")):
         if "content-type" in head.headers:
@@ -232,6 +229,8 @@ class TitleHTMLParser(HTMLParser):
             self.title += data
 
 
+linkregex = re.compile(r"(?:http[s]?://|www)(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+")
+
 @plugin
 class url:
     def __init__(self):
@@ -273,43 +272,50 @@ class url:
                 return message.reply(*read_pdf_metadata(urls[0]))
 
 
-    @regex(r"((?:http[s]?://|www)(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)")
+    @regex(r"http[s]?://|www")
     def url(self, message):
         if message.text[0] not in "!#.$%":
+            links = set()
 
-            link = message.groups
+            links.update(linkregex.findall(message.text))
 
-            if not link.startswith("http"):
-                link = "http://" + link
+            for link in links:
+                hasresponded = False
 
-            for pattern, handler in websitehandlers.items():
-                if re.search(pattern, link):
-                    data, text = handler(link)
-                    return message.reply(data, text)
+                if not link.startswith("http"):
+                    link = "http://" + link
 
-            head = requests.head(link, timeout=5)
-            contentstats = ""
-            if "content-type" in head.headers:
-                contentstats += head.headers["content-type"]
-            else:
-                contentstats += "Unknown type"
-            if "content-length" in head.headers:
-                try:
-                    length = size(int(head.headers["content-length"]))
-                except:
-                    length = "0B"
-                contentstats += "; " + length
-            if "html" in contentstats.lower():
-                page = requests.get(link, headers=headers, stream=True)
+                for pattern, handler in websitehandlers.items():
+                    if re.search(pattern, link):
+                        data, text = handler(link)
+                        yield message.reply(data, text)
+                        hasresponded = True
 
-                parse = TitleHTMLParser(convert_charrefs=True)
+                if not hasresponded:
+                    head = requests.head(link, timeout=5)
+                    contentstats = ""
+                    if "content-type" in head.headers:
+                        contentstats += head.headers["content-type"]
+                    else:
+                        contentstats += "Unknown type"
+                    if "content-length" in head.headers:
+                        try:
+                            length = size(int(head.headers["content-length"]))
+                        except:
+                            length = "0B"
+                        contentstats += "; " + length
+                    if "html" in contentstats.lower():
+                        page = requests.get(link, headers=headers, stream=True)
 
-                parse.feed(page.content.decode())
-                if parse.title:
-                    return message.reply("Title: " + parse.title.strip())
+                        parse = TitleHTMLParser(convert_charrefs=True)
 
-            if contentstats:
-                return message.reply("[%s]" % contentstats)
+                        parse.feed(page.content.decode())
+                        if parse.title:
+                            yield message.reply("Title: " + parse.title.strip())
+                            hasresponded = True
+
+                    if contentstats and not hasresponded:
+                        yield message.reply("[%s]" % contentstats)
 
 
 
