@@ -1,7 +1,5 @@
 import socket
-from queue import PriorityQueue
 import threading
-import re
 from ssl import wrap_socket
 from select import select
 
