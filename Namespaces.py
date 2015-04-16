@@ -2,7 +2,9 @@ from collections.abc import MutableMapping, Mapping
 from collections import defaultdict
 
 class MutableNameSpace(MutableMapping):
-    def __init__(self, data, all=False):
+    def __init__(self, data=None, all=False):
+        if data is None:
+            data = {}
         self._data = data
         self._all = all
 
@@ -29,6 +31,9 @@ class MutableNameSpace(MutableMapping):
             return self._data[key]
         else:
             self._data[key] = default
+
+    def copy(self):
+        return MutableNameSpace(self._data.copy(), all=self._all)
 
     def __getattr__(self, item):
         if item in self._data:
@@ -73,7 +78,9 @@ class MutableNameSpace(MutableMapping):
 
 
 class ReadOnlyNameSpace(Mapping):
-    def __init__(self, data, all=False):
+    def __init__(self, data=None, all=False):
+        if data is None:
+            data = {}
         self._data = data
         self._all = all
 
