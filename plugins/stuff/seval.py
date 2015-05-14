@@ -1,6 +1,7 @@
 import ast
 from collections import OrderedDict, ChainMap
-from itertools import chain
+import traceback
+import sys
 
 def and_(args):
     for x in iter(args):
@@ -56,6 +57,7 @@ slices = {
 }
 
 exprs = {
+    ast.Raise: lambda exc, cause, env: Raise_(eval_expr(exc, env)),
     ast.BoolOp: lambda env, op, values: boolops[type(op)](eval_expr(value, env) for value in values),
     ast.BinOp: lambda env, op, left, right: binops[type(op)](eval_expr(left, env), eval_expr(right, env)),
     ast.UnaryOp: lambda env, op, operand: unaryops[type(op)](eval_expr(operand, env)),
@@ -80,7 +82,7 @@ exprs = {
     ast.NameConstant: lambda env, value: value,
     ast.Attribute: lambda env, value, attr, ctx:
     (getattr(eval_expr(value, env), attr) if isinstance(value, ast.Attribute) else getattr(eval_expr(value, env), attr))
-    if not attr.startswith("__") else raise_("access to private fields is restricted"),
+    if not attr.startswith("_") else raise_("access to private fields is disallowed"),
 }
 
 str_boolops = {
@@ -187,20 +189,30 @@ def ast_to_string(node):
 def seval(expr, env):
     body = ast.parse(expr, mode='single').body
     responses = []
-    for stmt_or_expr in body:
-        response = None
-        if isinstance(stmt_or_expr, ast.Expr):
-            response = eval_expr(stmt_or_expr.value, env)
-        elif isinstance(stmt_or_expr, ast.Assign):
-            eval_assign(stmt_or_expr, env)
-        elif isinstance(stmt_or_expr, ast.AugAssign):
-            augassign(stmt_or_expr, env)
-        else:
-            raise Exception(ast.dump(stmt_or_expr))
+    try:
+        for stmt_or_expr in body:
+            response = None
+            if isinstance(stmt_or_expr, ast.Expr):
+                response = eval_expr(stmt_or_expr.value, env)
+            elif isinstance(stmt_or_expr, ast.Assign):
+                eval_assign(stmt_or_expr, env)
+            elif isinstance(stmt_or_expr, ast.AugAssign):
+                augassign(stmt_or_expr, env)
+            elif isinstance(stmt_or_expr, ast.Delete):
+                eval_del(stmt_or_expr, env)
+            else:
+                raise Exception(ast.dump(stmt_or_expr))
 
-        if response is not None:
-            responses.append(response)
-    return responses
+            if response is not None:
+                responses.append(response)
+        return responses, env
+    except Exception as e:
+
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        print("*** print_tb:")
+        traceback.print_tb(exc_traceback, file=sys.stdout)
+
+        return e, env
 
 def augassign(node, env):
     val_ = ast.BinOp(left=node.target, op=node.op, right=node.value)
@@ -211,6 +223,8 @@ def eval_assign(node, env):
     val = eval_expr(node.value, env)
     for x in node.targets:
         if isinstance(x, ast.Attribute):
+            if x.attr.startswith("_"):
+                raise Exception("access to private fields is disallowed")
             setattr(eval_expr(x.value, env), x.attr, val)
         elif isinstance(x, ast.Name):
             env[x.id] = val
@@ -223,6 +237,20 @@ def eval_assign(node, env):
             bind(x, val, env)
     return env
 
+def eval_del(node, env):
+    for x in node.targets:
+        if isinstance(x, ast.Attribute):
+            if x.attr.startswith("_"):
+                raise Exception("access to private fields is disallowed")
+            delattr(eval_expr(x.value, env), x.attr)
+        elif isinstance(x, ast.Name):
+            env.pop(x.id)
+        elif isinstance(x, ast.Subscript):
+            if isinstance(x.slice, ast.Index):
+                del eval_expr(x.value, env)[eval_expr(x.slice.value, env)]
+            elif isinstance(x.slice, ast.Slice):
+                del eval_expr(x.value, env)[slice(eval_expr(x.slice.lower, env), eval_expr(x.slice.upper, env), eval_expr(x.slice.step, env))]
+    return env
 
 def eval_expr(node, env):
     if node is not None:
@@ -323,6 +351,8 @@ def bind(node, rhs, env):
 def raise_(string):
     raise Exception(string)
 
+def Raise_(exc):
+    raise exc
 
 def generate(gens, env):
     if not gens:
