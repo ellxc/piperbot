@@ -41,3 +41,18 @@ size_str = lambda x:
 ```
 
 Convert a raw number of bytes into a human readable size string.
+
+### Exception Handling
+
+```
+#alias pweather = echo {} || > message.data if message.data is not \"\" else raise_(Exception(\"You must provide a place name.\")) || weather {} || > \" | \".join([\"{0[day]}: {0[condition]}. High: {0[high]}, Low: {0[low]}.\".format(x) for x in message.data['forecast']]) || echo
+```
+
+In this alias seval is being used to raise an exception with `raise_()` if the
+input is invalid, or allow the expression to continue if it is valid.
+
+```py
+message.data if message.data is not "" else raise_(Exception("You must provide a place name."))
+```
+
+This means aliases may have some basic input validation.
