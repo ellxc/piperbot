@@ -200,7 +200,7 @@ class fite:
         '''straps {target} to a tablesaw.''',
         '''teliports {target} into deep space.''',
         '''howls at the moon. {target} seems unperturbed.''',
-        '''The villagers think {target} must be a werewolf, so {target} gets linched.''',
+        '''The villagers think {target} must be a werewolf, so {target} gets lynched.''',
         '''unplugs {target} from the matrix.''',
         '''stomps on {target}'s head.''',
         '''gives {target} x-ray vision, all their friends get cancer.''',
