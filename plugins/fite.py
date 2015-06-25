@@ -181,6 +181,7 @@ class fite:
         '''K-Lines {target}.''',
         '''casts penis of the infinite on {target}''',
         '''crushes {target}'s skull with his bare hands.''',
+        '''crushes {target}'s skull with his bear hands. *ROAR*''',
         '''Ties {target} up in ropes.''',
         '''Ties {target}'s shoelaces together''',
         '''pees in {target}'s soup.''',
