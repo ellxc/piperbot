@@ -3,7 +3,7 @@ import datetime
 from threading import Thread, Event
 from multiprocessing.pool import ThreadPool
 from dateutil import parser
-
+from math import floor, ceil
 
 class Scheduler(Thread):
     def __init__(self, threads=4):
@@ -57,7 +57,7 @@ class Scheduler(Thread):
 
 class Task():
     def __init__(self, interval=0, unit="seconds", start_time=None, start_date=None, max_runs=1, task=None,
-                 straight_away=True):
+                 straight_away=True, delayed_allowed=False):
         self.interval = interval
         self.unit = unit
         self.start_time = start_time
@@ -65,6 +65,7 @@ class Task():
         self.no_of_runs = 0
         self.max_runs = max_runs
         self.straight_away = straight_away
+        self.delayed_allowed = delayed_allowed
         self.next_run = None
         self.period = None
         self.task = task
@@ -102,13 +103,29 @@ class Task():
     def schedule(self):
         if self.no_of_runs == 0:
             self.period = datetime.timedelta(**{self.unit: self.interval})
-            if self.start_date is None or self.start_date < datetime.datetime.now().date():
+            if self.start_date is None:  # or self.start_date < datetime.datetime.now().date():
                 self.start_date = datetime.datetime.now().date()
-            if self.start_time is None or self.start_time < datetime.datetime.now().time():
+            if self.start_time is None:  # or self.start_time < datetime.datetime.now().time():
                 self.start_time = datetime.datetime.now().time()
             self.next_run = datetime.datetime.combine(self.start_date, self.start_time)
+
             if not self.straight_away:
                 self.next_run += self.period
+
+            if self.next_run < datetime.datetime.now():
+                if self.delayed_allowed:
+                    return True
+                try:
+                    timesout = (datetime.datetime.now() - self.next_run) / self.period
+                    if self.max_runs == -1 or timesout < self.max_runs:
+                        self.no_of_runs += floor(timesout)
+                        self.next_run += ceil(timesout) * self.period
+                        return True
+                    else:
+                        return False
+                except ZeroDivisionError:
+                    return False
+
             return True
         elif self.no_of_runs < self.max_runs or self.max_runs == -1:
             self.next_run += self.period

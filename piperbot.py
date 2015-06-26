@@ -18,12 +18,7 @@ from operator import itemgetter
 from serverconnection import ServerConnection
 from itertools import chain
 from scheduler import Scheduler
-
-
-class User:
-    def __init__(self):
-        self.channels = defaultdict(list)
-        self.data = {}
+from Namespaces import *
 
 
 def _coroutine(func):
@@ -39,11 +34,9 @@ class PiperBot(threading.Thread):
     def __init__(self):
         super(PiperBot, self).__init__(daemon=True)
 
-        self.servers = {}
+        self.servers = MutableNameSpace({})
 
         self.admins = defaultdict(list)
-        self.users = defaultdict(lambda: defaultdict(User))
-        self.ops = defaultdict(lambda: defaultdict(set))
 
         self.command_char = "#"
         self.in_queue = PriorityQueue()
@@ -54,6 +47,7 @@ class PiperBot(threading.Thread):
         self.aliases = {}
         self.plugins = {}
 
+        self.pre_dispatch_exts = []
         self.pre_command_exts = []
         self.post_command_exts = []
         self.pre_event_exts = []
@@ -311,6 +305,9 @@ class PiperBot(threading.Thread):
             raise e
         except Exception as e:
             print("Error calling trigger: %s : %s: %s" % (func.__name__, type(e), e))
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            print("*** print_tb:")
+            traceback.print_tb(exc_traceback, file=sys.stdout)
 
     def handle_alias_assign(self, message):
         try:
@@ -579,6 +576,36 @@ class PiperBot(threading.Thread):
         except GeneratorExit:
             pass  # pipe closed
 
+    @staticmethod
+    def from_config(filename):
+
+        config = json.load(json_config)
+        print(json.dumps(config, sort_keys=True, indent=4))
+        print(list(config.keys()))
+        bot = PiperBot()
+
+        if "apikeys" in config:
+            for api, key in config["apikeys"]:
+                bot.apikeys[api] = key
+
+        for plugin, config_ in config["plugins"].items():
+            bot.load_plugin_from_module(plugin)
+
+        for server in config["servers"]:
+            server_name = server["IRCNet"]
+            network = server["IRCHost"]
+            name = server["IRCName"]
+            user = server["IRCUser"]
+            port = server["IRCPort"]
+            nick = server["IRCNick"]
+            password = server["IRCPass"] if "IRCPass" in server else None
+            autojoin = server["AutoJoin"]
+            admins = server["Admins"]
+            usessl = server["UseSSL"]
+            bot.connect_to(server_name, network, port, nick, autojoin, admins, password, user, name, usessl)
+
+        return bot
+
 
 
 
@@ -588,26 +615,6 @@ class PiperBot(threading.Thread):
 
 if __name__ == "__main__":
     json_config = codecs.open(argv[1], 'r', 'utf-8-sig')
-    config = json.load(json_config)
-    bot = PiperBot()
+    bot = PiperBot.from_config(json_config)
 
-    if "apikeys" in config:
-        for api, key in config["apikeys"]:
-            bot.apikeys[api] = key
-
-    for plugin_ in config["plugins"]:
-        bot.load_plugin_from_module(plugin_)
-
-    for server in config["servers"]:
-        server_name = server["IRCNet"]
-        network = server["IRCHost"]
-        name = server["IRCName"]
-        user = server["IRCUser"]
-        port = server["IRCPort"]
-        nick = server["IRCNick"]
-        password = server["IRCPass"] if "IRCPass" in server else None
-        autojoin = server["AutoJoin"]
-        admins = server["Admins"]
-        usessl = server["UseSSL"]
-        bot.connect_to(server_name, network, port, nick, autojoin, admins, password, user, name, usessl)
     bot.run()

@@ -24,7 +24,6 @@ class linker:
             gurl = "https://api-ssl.bitly.com/v3/shorten?login=elliotxc&apiKey=R_e3a81272a9644dccb7c84b218d699d9f&format=txt&longUrl=%s" % urllib.parse.quote(url)
             req = urllib.request.Request(gurl)
             results = urllib.request.urlopen(req).read().decode()
-            print(results)
             return message.reply(results)
         else:
             raise ValueError("not a valid url")

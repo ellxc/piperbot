@@ -29,13 +29,11 @@ class spamfilter:
         try:
             while 1:
                 message = yield
-                print(message)
-                if message is not None:
-                    if message.command in ["PRIVMSG", "ACTION", "NOTICE"]:
-                        if self.spams[message.server][message.params]:
-                            if time - self.spams[message.server][message.params] < timedelta(seconds=30):
-                                continue
-                    target.send(message)
+                if message.command in ["PRIVMSG", "ACTION", "NOTICE"]:
+                    if self.spams[message.server][message.params]:
+                        if time - self.spams[message.server][message.params] < timedelta(seconds=30):
+                            continue
+                target.send(message)
         except GeneratorExit:
             target.close()
 

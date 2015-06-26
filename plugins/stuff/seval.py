@@ -2,6 +2,7 @@ import ast
 from collections import OrderedDict, ChainMap
 import traceback
 import sys
+import itertools
 
 def and_(args):
     for x in iter(args):
@@ -11,7 +12,7 @@ def and_(args):
 
 boolops = {
     ast.And: and_,  # this functions well enough, who uses 'and' to get values anyway?
-    ast.Or: lambda vals: next(filter(bool, vals)),
+    ast.Or: lambda vals: next(itertools.chain(filter(bool, vals),[False])),
 }
 
 binops = {

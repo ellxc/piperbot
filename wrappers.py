@@ -36,6 +36,12 @@ def on_unload(func):
     return func
 
 
+def serialise(func):
+    if not hasattr(func, '_onNewUser'):
+        func._onNewUser = True
+    return func
+
+
 def adv_command(name=None, **kwargs):
     def _coroutine(func):
         if hasattr(func, '_commands'):
@@ -101,13 +107,10 @@ def command(name=None, **kwargs):
                             else:
                                 x = func(self, line.reply(line.data, args=arg.args))
                         if x is not None:
-                            print(target)
                             if inspect.isgenerator(x):
                                 for y in x:
-                                    print(y)
                                     target.send(y)
                             else:
-                                print(x)
                                 target.send(x)
                 except GeneratorExit:
                     if target is not None:
@@ -325,6 +328,7 @@ def _plugin__init__(self, bot):
     self.bot = bot
     self._onLoads = []
     self._onUnloads = []
+    self._onNewUser = None
     self._triggers = []
     self._commands = []
     self._regexes = []
@@ -339,6 +343,8 @@ def _plugin__init__(self, bot):
             self._onLoads.append(func)
         if hasattr(func, '_onUnload'):
             self._onUnloads.append(func)
+        if hasattr(func, '_onNewUser'):
+            self._onNewUser = func
         if hasattr(func, '_triggers'):
             for trigger in func._triggers:
                 self._triggers.append((trigger, func))
