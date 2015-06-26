@@ -109,7 +109,7 @@ class forecast_io:
         w = self.get_forecast_io_weather(message.data)
         if isinstance(w, dict):
             return message.reply(data=w, 
-                text="Current condition for {2}: {1} {0[precipProbability]}% chance of rain. \
+                text="Current condition for {2}: {1} P({0[precipProbability]}) probability of precipitation. \
 {0[temperature]}°C, feels like {0[apparentTemperature]}°C. Dew Point: {0[dewPoint]}°C. \
 Humidity: {0[humidity]}. Wind Speed: {0[windSpeed]}mph bearing {0[windBearing]:03d}. \
 Cloud Cover: {0[cloudCover]}. Pressure: {0[pressure]}mb. Ozone: {0[ozone]}.".format(w['currently'], w['minutely']['summary'], message.data))
