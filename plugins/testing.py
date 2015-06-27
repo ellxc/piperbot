@@ -1,5 +1,7 @@
 from wrappers import *
 import time
+from scheduler import Task
+from Message import Message
 
 @plugin(desc="testing module 1234")
 class testing1:
@@ -18,7 +20,8 @@ class testing2:
 
     @command("test")
     def test(self, message):
-        return message.reply("your message: " + str(message))
+        yield message.reply("your message: " + str(message))
+        yield message.reply("your message: " + str(message))
 
 
     @command("data")
@@ -33,6 +36,9 @@ class testing2:
     def admin(self, message):
         return message.reply("yes {}, you are an admin!".format(message.nick))
 
+    @scheduled(Task.every(1).minute)
+    def oneminute(self):
+        self.bot.send(Message(server="Holmes", params="#piperbot", command="PRIVMSG", text="1 min"))
 
     @adv_command("time")
     def timer(self, arg, target):

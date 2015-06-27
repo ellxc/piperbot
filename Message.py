@@ -18,8 +18,6 @@ class Message():
         self.command = command
         self.params = params
         self.ctcp = ctcp
-        if ctcp:
-            self.command = ctcp
         self.text = text
         self.timestamp = timestamp or datetime.datetime.now()
         self.groups = groups
@@ -51,7 +49,7 @@ class Message():
     def to_line(self):
         text = self.text.replace("\r", "").replace("\n", "")
         return "%s %s :%s%s%s" % (
-            self.command, self.params, ("\001%s " % self.ctcp if self.ctcp else ""), bytes(self.text, "utf-8")[:550].decode(),
+            self.command, self.params, ("\001%s " % self.ctcp if self.ctcp else ""), bytes(text, "utf-8")[:550].decode(),
             ("\001" if self.ctcp else ""))
 
     def to_pretty(self):

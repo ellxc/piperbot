@@ -272,13 +272,12 @@ class url:
                 return message.reply(*read_pdf_metadata(urls[0]))
 
 
-    @regex(r"http[s]?://|www")
+    @regex(r"(?:https?://www|https?://|www)")
     def url(self, message):
-        if message.text[0] not in "!#.$%":
+        if message.text[0] not in "!#.$%" and message.params.lower() != "#kentcs":
             links = set()
 
             links.update(linkregex.findall(message.text))
-
             for link in links:
                 hasresponded = False
 

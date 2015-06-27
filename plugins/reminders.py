@@ -87,9 +87,13 @@ class Reminders():
                 rems = json.load(infile)
                 for rem in rems:
                     reminder = Reminder.from_dict(rem)
+
                     def sendmsg():
                         self.bot.send(reminder.to_message())
-                        self.reminders.remove(reminder)
+                        try:
+                            self.reminders.remove(reminder)
+                        except ValueError:
+                            pass
 
                     self.bot.scheduler.add_task(reminder.get_task().do(sendmsg))
                     self.reminders.append(reminder)
@@ -136,7 +140,6 @@ class Reminders():
                 if message is None:
                     message = arg
                 setfor = message.nick
-                print(message.data)
                 if isinstance(message.data, datetime.datetime):
                     settime = message.data
                     settext = arg.data
@@ -205,7 +208,10 @@ class Reminders():
 
                 def sendmsg():
                     self.bot.send(reminder.to_message())
-                    self.reminders.remove(reminder)
+                    try:
+                        self.reminders.remove(reminder)
+                    except ValueError:
+                        pass
 
                 self.bot.scheduler.add_task(reminder.get_task().do(sendmsg))
 

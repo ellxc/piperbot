@@ -1,23 +1,23 @@
 ﻿{
-  "plugins": [
-    "serverutils",
-    "general",
-    "admintools",
-    "seval",
-    "karma",
-    "markov",
-    "maths",
-    "reminders",
-    "translate",
-    "users",
-    "regex",
-    "spamfilter",
-    "links",
-    "web",
-    "fite",
-    "weather",
-    "help"
-  ],
+  "plugins": {
+    "serverutils": {},
+    "general": {},
+    "admintools": {},
+    "seval": {},
+    "karma": {},
+    "markov": {},
+    "maths": {},
+    "reminders": {},
+    "translate": {},
+    "users": {},
+    "regex": {},
+    "spamfilter": {},
+    "links": {},
+    "web": {},
+    "fite": {},
+    "weather": {},
+    "help": {}
+  },
     "servers" : [
     {
       "IRCNet"   : "Holmes",

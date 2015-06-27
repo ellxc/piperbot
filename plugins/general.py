@@ -76,6 +76,22 @@ class general():
         return ret
 
 
+    @adv_command
+    def tail(self, arg, target):
+        lines = []
+        no = int(arg.text or 1)
+        try:
+            while 1:
+                x = yield
+                if x is not None:
+                    lines.append(x)
+        except GeneratorExit:
+            if lines:
+                for x in lines[-no:]:
+                    target.send(x)
+            target.close()
+
+
 
     @command
     def strip(self, message):

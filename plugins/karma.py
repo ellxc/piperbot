@@ -26,8 +26,11 @@ class Karma:
 
     @regex(r"(?:(\S+): |(\S+))(\+\+|--)")
     def mod(self, message):
-        if message.nick != (message.groups[0] or message.groups[1]):
-            self.karma[(message.groups[0] or message.groups[1]).lower()] += {"++": 1, "--": -1}[message.groups[2]]
+        target = (message.groups[0] or message.groups[1])
+        mod = {"++": 1, "--": -1}[message.groups[2]]
+
+        if message.nick.lower() != target.lower():
+            self.karma[target.lower()] += mod
 
     @command("karma", simple=True)
     def asd(self, message):

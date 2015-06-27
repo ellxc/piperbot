@@ -13,6 +13,8 @@ from functools import partial
 import dateutil.parser
 from Namespaces import *
 import pickle
+import unicodedata
+import itertools
 
 @plugin
 class Eval:
@@ -55,6 +57,8 @@ class Eval:
                 if isinstance(responses, list):
                     for response in responses:
                         target.send(arg.reply(response, repr(response)))
+                elif isinstance(responses, SyntaxError):
+                    raise responses
 
                 for key, item in env.items():
                     self.localenv[key] = item
@@ -71,7 +75,6 @@ class Eval:
 
                 for key in selftodelete:
                     del self.userspaces[arg.server][arg.nick][key]
-
 
                 if isinstance(responses, Exception):
                     raise responses
@@ -106,6 +109,7 @@ def raise_(text=None):
     raise Exception(text)
 
 globalenv = {
+    "itertools":itertools,
     "abs": abs,
     "all": all,
     "any": any,
@@ -166,6 +170,7 @@ globalenv = {
     "dateparse": dateutil.parser.parse,
     "raise_": raise_,
     "Exception": Exception,
+    "unicodedata":unicodedata,
 }
 
 
@@ -173,7 +178,7 @@ def sevalcall(text, localenv, userspaces, message):
     ret = {}
     retenv = localenv.copy()
     try:
-        env = MutableNameSpace(localenv.copy(), all=True)
+        env = localenv.copy()
 
 
 
@@ -204,6 +209,7 @@ def sevalcall(text, localenv, userspaces, message):
         return e, ret, retenv.setdefault("self", {})
 
 def seval_(text, env={}):
-    tempenv = globalenv.copy()
+    tempenv = dict(globalenv)
     tempenv.update(env)
-    return seval(text, tempenv)
+    tempenv.update(seval=seval_)
+    return seval(text, tempenv)[0]
