@@ -14,7 +14,7 @@ class yweather:
         w = self.get_yahoo_weather(message.data)
         if isinstance(w, dict):
             return message.reply(data=w, 
-                text="Weather for {0[city]}, {0[country]}: {0[condition]}, {0[temperature]}. Wind Speed: {0[wind_speed]} ({0[wind_direction]}), Wind Chill: {0[wind_chill]}. Visibility {0[visibility]}. High Temp: {0[high]}°C, Low Temp: {0[low]}°C. Sunrise: {0[sunrise]}, Sunset: {0[sunset]}.".format(w)
+                text="Weather for {0[city]}, {0[country]}: {0[condition]}, {0[temperature]}. Wind Speed: {0[wind_speed]} ({0[wind_direction]}), feels like: {0[wind_chill]}. Visibility {0[visibility]}. High Temp: {0[high]}°C, Low Temp: {0[low]}°C. Sunrise: {0[sunrise]}, Sunset: {0[sunset]}.".format(w)
             )
         else:
             return message.reply(data=w, text=w)
@@ -56,7 +56,7 @@ class yweather:
         humidity    = "{0}%".format(channel['atmosphere']['humidity'])
         pressure    = "{0}{1}".format(channel['atmosphere']['pressure'], channel['units']['pressure'])
         rising      = channel['atmosphere']['rising']
-        visibility  = "{0}{1}".format(channel['atmosphere']['visibility'], channel['units']['speed'])
+        visibility  = "{0}{1}".format(channel['atmosphere']['visibility'], channel['units']['distance'])
 
         sunrise     = channel['astronomy']['sunrise']
         sunset      = channel['astronomy']['sunset']
