@@ -73,7 +73,7 @@ exprs = {
                                                        generate(generators, env)},
     ast.GeneratorExp: lambda env, elt, generators: (eval_expr(elt, genenv) for genenv in generate(generators, env)),
     ast.Compare: lambda env, left, ops, comparators: compare_(left, ops, comparators, env),
-    ast.Call: lambda env, func, args, starargs, keywords, kwargs: call_(func, args, starargs, keywords, kwargs, env),
+    ast.Call: lambda env, func, args, keywords: call_(func, args, keywords, env),    
     ast.Num: lambda env, n: n,
     ast.Str: lambda env, s: s,
     ast.Subscript: lambda env, ctx, value, slice: slices[type(slice)](value_=value, env=env, **dict(ast.iter_fields(slice))),
@@ -308,14 +308,9 @@ def compare_(left, ops, comparators, env):
     comparisons = zip([left] + comparators, ops, comparators)
     return all(compares[type(op)](left, right) for left, op, right in comparisons)
 
-
-def call_(func, args, starargs, keywords, kwargs, env):
+def call_(func, args, keywords, env):
     args2 = [eval_expr(arg, env) for arg in args]
-    if starargs:
-        args2.extend(eval_expr(starargs, env))
     kwargs2 = {keyword.arg: eval_expr(keyword.value, env) for keyword in keywords}
-    if kwargs:
-        kwargs2.update(eval_expr(kwargs, env))
     func2 = eval_expr(func, env)
     if isinstance(func2, Lambda):
         return func2(*args2, __env__=env, **kwargs2)

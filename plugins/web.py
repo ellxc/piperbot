@@ -272,7 +272,7 @@ class url:
                 return message.reply(*read_pdf_metadata(urls[0]))
 
 
-    @regex(r"(?:https?://www|https?://|www)")
+    @regex(r"^.*(?:https?://www|https?://|www).*$")
     def url(self, message):
         if message.text[0] not in "!#.$%" and message.params.lower() != "#kentcs":
             links = set()

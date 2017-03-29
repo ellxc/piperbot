@@ -240,13 +240,11 @@ class fite:
     @command
     def fite(self, message):
         #assert isinstance(message.data,str), ValueError("needs to be a string")
-        nicks = [nick for nick, user in self.bot.users[message.server].items() if message.params in user.channels[message.server] and nick != self.bot.servers[message.server].nick]
         data = {
             "sender": message.nick,
             "bot": self.bot.servers[message.server].nick,
             "channel": message.params,
             "server": message.server,
-            "random": random.choice(nicks),
         }
 
         if message.data.split():
@@ -257,23 +255,19 @@ class fite:
                 else:
                     yield message.reply(response.format(target=nick, **data))
         else:
-            nicks = [nick for nick, user in self.bot.users[message.server].items() if message.params in user.channels[message.server] and nick != self.bot.servers[message.server].nick]
-            nick = random.choice(nicks)
             action, response = self.random_response()
             if action:
-                yield message.reply(response.format(target=nick, **data), ctcp="ACTION")
+                yield message.reply(response.format(target=message.nick, **data), ctcp="ACTION")
             else:
-                yield message.reply(response.format(target=nick, **data))
+                yield message.reply(response.format(target=message.nick, **data))
 
     @trigger(lambda message, bot: message.ctcp=="ACTION" and bot.servers[message.server].nick in message.text)
     def fiteback(self, message):
-        nicks = [nick for nick, user in self.bot.users[message.server].items() if message.params in user.channels[message.server] and nick != self.bot.servers[message.server].nick]
         data = {
             "sender": message.nick,
             "bot": self.bot.servers[message.server].nick,
             "channel": message.params,
             "server": message.server,
-            "random": random.choice(nicks),
         }
         action, response = self.random_response()
         if action:
