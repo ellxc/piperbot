@@ -50,8 +50,12 @@ class yweather:
 
         high        = channel['item']['forecast'][0]['high']
         low         = channel['item']['forecast'][0]['low']
+        
+        # There's a bug in the weather API where windchill is reported as "feels like" in farenheight.
+        feelsLike   = (float(channel['wind']['chill']) - 32) / 1.8
+        chill       = feelsLike - float(channel['item']['condition']['temp'])
+        windChill   = "{0:.2f}°{1}".format(chill, channel['units']['temperature'])
 
-        windChill   = "{0}°{1}".format(channel['wind']['chill'], channel['units']['temperature'])
         windDir     = "{0:03d}deg".format(int(channel['wind']['direction']))
         windSpeed   = "{0} {1}".format(channel['wind']['speed'], channel['units']['speed'])
 
@@ -177,7 +181,7 @@ Cloud Cover: {0[cloudCover]}. Pressure: {0[pressure]}mb. Ozone: {0[ozone]}.".for
         return json['query']['results']['place']['centroid']
 
     def get_forecast_io_weather(self, place):
-        if not message:
+        if not place:
             raise Exception("You must provide a place name.")
 
         ll = self.latlong(place)
