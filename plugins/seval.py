@@ -1,7 +1,7 @@
 import ast
 from wrappers import *
 from plugins.stuff.seval import seval
-from collections import defaultdict, Counter
+from collections import defaultdict, Counter, namedtuple
 import math
 import datetime
 import json
@@ -15,6 +15,7 @@ from Namespaces import *
 import pickle
 import unicodedata
 import itertools
+from base64 import b64encode, b64decode
 
 @plugin
 class Eval:
@@ -108,6 +109,9 @@ class Eval:
 def raise_(text=None):
     raise Exception(text)
 
+
+b64 = namedtuple('base64', ('b64encode', 'b64decode'))(b64encode, b64decode)
+
 globalenv = {
     "itertools":itertools,
     "abs": abs,
@@ -171,6 +175,7 @@ globalenv = {
     "raise_": raise_,
     "Exception": Exception,
     "unicodedata":unicodedata,
+    "base64":b64,
 }
 
 

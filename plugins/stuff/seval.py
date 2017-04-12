@@ -76,6 +76,7 @@ exprs = {
     ast.Call: lambda env, func, args, keywords: call_(func, args, keywords, env),    
     ast.Num: lambda env, n: n,
     ast.Str: lambda env, s: s,
+    ast.Bytes: lambda env, s: s,
     ast.Subscript: lambda env, ctx, value, slice: slices[type(slice)](value_=value, env=env, **dict(ast.iter_fields(slice))),
     ast.Name: lambda env, ctx, id: env[id],
     ast.List: lambda env, ctx, elts: list(eval_expr(elt, env) for elt in elts),
@@ -163,6 +164,7 @@ str_exprs = {
     # + kwargs]),
     ast.Num: lambda n: str(n),
     ast.Str: lambda s: "'" + s + "'",
+    ast.Bytes: lambda s: "b'"+ s + "'",
     ast.Subscript: lambda ctx, value, slice:
     str_slices[type(slice)](value_=value, **dict(ast.iter_fields(slice))),
     ast.Name: lambda ctx, id: id,
