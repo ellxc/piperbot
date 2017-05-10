@@ -268,8 +268,6 @@ class PiperBot(threading.Thread):
                 first = message.text[1:].split()[0]
                 if first == "alias":
                     self.handle_alias_assign(message)
-                elif first == "overwrite":
-                    self.handle_alias_assign(message, overwrite=True)
                 elif first in self.commands or first in self.aliases:
                     self.worker_pool.apply_async(self.handle_command,  args=(message,))
 
@@ -311,7 +309,7 @@ class PiperBot(threading.Thread):
             print("*** print_tb:")
             traceback.print_tb(exc_traceback, file=sys.stdout)
 
-    def handle_alias_assign(self, message, overwrite=False):
+    def handle_alias_assign(self, message):
         try:
             name, *alias = message.text[len(self.command_char)+5:].split("=")
             name = name.strip()
@@ -319,9 +317,6 @@ class PiperBot(threading.Thread):
             if name in self.commands:
                 raise Exception("cannot overwrite existing command")
 
-            if name in self.aliases and not overwrite:
-                raise Exception("alias already exists. Use the overwrite command to override.")
-            
             commands = map(lambda x: [(command, " ".join(args)) for command, *args in [x.split(" ")]][0],
                            map(lambda x: x.strip(), alias.split(" || ")))
             funcs = []
