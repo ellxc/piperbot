@@ -68,6 +68,6 @@ class Karma:
         else:
             key = message.nick
             score = self.karma[key.lower()]
-            yield message.reply([(key, score)], "you have {} karma!".format(score or "no"))
+            yield message.reply([(key, score)], "{}: you have {} karma.".format(key, score or "no"))
 
 
